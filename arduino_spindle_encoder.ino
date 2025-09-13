@@ -2,12 +2,11 @@
 
 const int PIN_A = 2;
 const int PIN_B = 3;
-
-#ifdef USE_Z_PIN
 const int PIN_Z = 4;
-#endif  // USE_Z_PIN
 
 volatile short position = 0;
+
+short last_position = 0;
 
 volatile int quadrature = 0;
 
@@ -44,7 +43,6 @@ void quad_changed() {
   }
   position += change;
 
-#if defined(USE_Z_PIN)
   // reset using Z pin
   if (digitalRead(PIN_Z) == 1) {
     if (quadrature == 0x7) {
@@ -55,22 +53,20 @@ void quad_changed() {
       position = -1;
     }
   }
-#elif defined(ENCODER_PULSE_PER_REV)
-  if (position < 0) {
-    position = (ENCODER_PULSE_PER_REV << 2) - 1;
-  } else if (position == (ENCODER_PULSE_PER_REV << 2)) {
-    position = 0;
-  }
-#else
-  // no reset, use binary overflow according to position variable type
-#endif  // USE_Z_PIN
+}
+
+const float DEGREE_PER_CHANGE = 360.0f / ((float)(ENCODER_PULSE_PER_REV << 2));  // times 4 for number of *changes* per revolution
+
+inline float angle_from_position(float pos) {
+  return DEGREE_PER_CHANGE * pos;
 }
 
 void setup() {
   Serial.begin(9600);
-#ifdef USE_Z_PIN
+  Serial.print("Angular resolution: ");
+  Serial.print(DEGREE_PER_CHANGE);
+  Serial.println(" degrees per quadrature edge");
   pinMode(PIN_Z, INPUT);
-#endif  // USE_Z_PIN
   pinMode(PIN_A, INPUT);
   pinMode(PIN_B, INPUT);
   quadrature = (((digitalRead(PIN_B) << 1) + digitalRead(PIN_A)) << 2) & 0xF;
@@ -87,5 +83,10 @@ void loop() {
     last_invalid_quadrature = 0;
   }
 
-  Serial.println(position);
+  if (position != last_position) {
+    last_position = position;
+    float angle = angle_from_position(last_position);
+    Serial.print(angle);
+    Serial.println("°");
+  }
 }
