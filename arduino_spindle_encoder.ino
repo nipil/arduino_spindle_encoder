@@ -1,205 +1,269 @@
+/************************* customize code *************************/
+
 // #define USE_SERIAL
 
-#define ENCODER_PULSE_PER_REV 1024
+// Encoder pins
+#define PIN_IN_QUAD_A 2
+#define PIN_IN_QUAD_B 3
+#define PIN_IN_QUAD_Z 4
 
-#define NUM_DELTAS 16
-
-#define IN_QUAD_A 2
-#define IN_QUAD_B 3
-#define IN_QUAD_Z 4
-
+// Display pins
 #define NUM_SEGMENTS 8
-#define OUT_SEGMENT_A 5
-#define OUT_SEGMENT_B 6
-#define OUT_SEGMENT_C 7
-#define OUT_SEGMENT_D 8
-#define OUT_SEGMENT_E 9
-#define OUT_SEGMENT_F 10
-#define OUT_SEGMENT_G 11
-#define OUT_SEGMENT_P 12
-
+#define PIN_OUT_SEGMENT_A 5
+#define PIN_OUT_SEGMENT_B 6
+#define PIN_OUT_SEGMENT_C 7
+#define PIN_OUT_SEGMENT_D 8
+#define PIN_OUT_SEGMENT_E 9
+#define PIN_OUT_SEGMENT_F 10
+#define PIN_OUT_SEGMENT_G 11
+#define PIN_OUT_SEGMENT_P 12
 #define NUM_DIGITS 4
-#define OUT_DIGIT_1 A0
-#define OUT_DIGIT_2 A1
-#define OUT_DIGIT_3 A2
-#define OUT_DIGIT_4 A3
+#define PIN_OUT_DIGIT_1 A0
+#define PIN_OUT_DIGIT_2 A1
+#define PIN_OUT_DIGIT_3 A2
+#define PIN_OUT_DIGIT_4 A3
 
-volatile uint16_t position = 0;
+// Encoder rising edge per revolution (for each A/B signal)
+#define ENCODER_PULSES_PER_REVOLUTION 1024
 
+/************************* generic code *************************/
+
+// Encoder count of 1/B signal *changes* in a single turn = max raw value before over/under flowing
+#define ENCODER_RAW_VALUE_RANGE (ENCODER_PULSES_PER_REVOLUTION << 2)
+
+// Quadrature encoder
+// 2 possible signal values per quadrature signal
+// 2 states for A/B (one state before and one state after) to decide direction
+// = 4 bits of index for the lookup table
+#define NUM_QUADRATURE_LOOKUPS (1 << 4)
+
+// Do not process until homed
 #define POSITION_UNDEFINED 0xFFFF
 
-uint16_t last_position = POSITION_UNDEFINED;
+// Angle decimals
+#define NUM_DECIMAL_STEPS 10
 
-volatile uint8_t quadrature = 0;
+// Power on self test duration
+#define DISPLAY_MODE_TEST_DURATION_MS 1000
 
-volatile uint8_t last_invalid_quadrature = 0;
+// Quadrature actions
+#define QUADRATURE_CW_INCREMENT (+1)
+#define QUADRATURE_CCW_DECREMENT (-1)
+#define QUADRATURE_NOOP (0)
+#define QUADRATURE_INVALID (2)
 
-int8_t delta[NUM_DELTAS] = {
+// bit order:     PGFEDCBA
+#define GLYPH_0 0b00111111
+#define GLYPH_1 0b00000110
+#define GLYPH_2 0b01011011
+#define GLYPH_3 0b01001111
+#define GLYPH_4 0b01100110
+#define GLYPH_5 0b01101101
+#define GLYPH_6 0b01111101
+#define GLYPH_7 0b00000111
+#define GLYPH_8 0b01111111
+#define GLYPH_9 0b01101111
+#define GLYPH_I 0b00010000
+#define GLYPH_N 0b01010100
+#define GLYPH_T 0b01111000
+#define GLYPH_E 0b01111001
+#define GLYPH_EMPTY 0b00000000
+#define GLYPH_PERIOD 0b10000000
+
+// Display rendering lookup
+#define NUM_GLYPHS 16
+
+typedef enum {
+  ERROR_CODE_NONE = 0,
+  ERROR_CODE_QUADRATURE,
+  ERROR_CODE_MAX
+} ERROR_CODE;
+
+typedef enum {
+  DISPLAY_MODE_TEST = 0,
+  DISPLAY_MODE_INIT,
+  DISPLAY_MODE_RPM,
+  DISPLAY_MODE_DEGREES,
+  DISPLAY_MODE_RAW,
+  DISPLAY_MODE_ERROR,
+  DISPLAY_MODE_MAX
+} DISPLAY_MODE;
+
+const int8_t QUADRATURE_LOOKUPS[NUM_QUADRATURE_LOOKUPS] = {
   /* i old new        */
   /*    ba BA         */
-  /* 0  00 00 same    */ 0,
-  /* 1  00 01 cw 1    */ +1,
-  /* 2  00 10 ccw 1   */ -1,
-  /* 3  00 11 invalid */ 2,
-  /* 4  01 00 ccw 4   */ -1,
-  /* 5  01 01 same    */ 0,
-  /* 6  01 10 invalid */ 3,
-  /* 7  01 11 cw 2    */ +1, /* Z=1 cw */
-  /* 8  10 00 cw 4    */ +1,
-  /* 9  10 01 invalid */ 4,
-  /* A  10 10 same    */ 0,
-  /* B  10 11 ccw 2   */ -1,
-  /* C  11 00 invalid */ 5,
-  /* D  11 01 ccw 3   */ -1, /* Z=1 ccw */
-  /* E  11 10 cw 3    */ +1, /* Z=1 cw */
-  /* F  11 11 same    */ 0
+  /* 0  00 00 same    */ QUADRATURE_NOOP,
+  /* 1  00 01 cw 1    */ QUADRATURE_CW_INCREMENT,
+  /* 2  00 10 ccw 1   */ QUADRATURE_CCW_DECREMENT,
+  /* 3  00 11 invalid */ QUADRATURE_INVALID,
+  /* 4  01 00 ccw 4   */ QUADRATURE_CCW_DECREMENT,
+  /* 5  01 01 same    */ QUADRATURE_NOOP,
+  /* 6  01 10 invalid */ QUADRATURE_INVALID,
+  /* 7  01 11 cw 2    */ QUADRATURE_CW_INCREMENT, /* Z=1 cw */
+  /* 8  10 00 cw 4    */ QUADRATURE_CW_INCREMENT,
+  /* 9  10 01 invalid */ QUADRATURE_INVALID,
+  /* A  10 10 same    */ QUADRATURE_NOOP,
+  /* B  10 11 ccw 2   */ QUADRATURE_CCW_DECREMENT,
+  /* C  11 00 invalid */ QUADRATURE_INVALID,
+  /* D  11 01 ccw 3   */ QUADRATURE_CCW_DECREMENT, /* Z=1 ccw */
+  /* E  11 10 cw 3    */ QUADRATURE_CW_INCREMENT,  /* Z=1 cw */
+  /* F  11 11 same    */ QUADRATURE_NOOP
 };
 
-void quad_changed() {
-  quadrature = ((quadrature << 2) + (digitalRead(IN_QUAD_B) << 1) + digitalRead(IN_QUAD_A)) & 0xF;
+const uint8_t DIGIT_PINS[NUM_DIGITS] = {
+  PIN_OUT_DIGIT_4,
+  PIN_OUT_DIGIT_3,
+  PIN_OUT_DIGIT_2,
+  PIN_OUT_DIGIT_1,
+};
 
-  int8_t change = delta[quadrature];
-  if (change >= 2) {
-    last_invalid_quadrature = quadrature;
+const uint8_t SEGMENT_PINS[NUM_SEGMENTS] = {
+  PIN_OUT_SEGMENT_A,
+  PIN_OUT_SEGMENT_B,
+  PIN_OUT_SEGMENT_C,
+  PIN_OUT_SEGMENT_D,
+  PIN_OUT_SEGMENT_E,
+  PIN_OUT_SEGMENT_F,
+  PIN_OUT_SEGMENT_G,
+  PIN_OUT_SEGMENT_P,
+};
+
+const uint8_t GLYPHS[NUM_GLYPHS] = {
+  /* i glyphe   PGFEDCBA */
+  /* 0 */ GLYPH_0,
+  /* 1 */ GLYPH_1,
+  /* 2 */ GLYPH_2,
+  /* 3 */ GLYPH_3,
+  /* 4 */ GLYPH_4,
+  /* 5 */ GLYPH_5,
+  /* 6 */ GLYPH_6,
+  /* 7 */ GLYPH_7,
+  /* 8 */ GLYPH_8,
+  /* 9 */ GLYPH_9,
+  /* A */ GLYPH_I,
+  /* B */ GLYPH_N,
+  /* C */ GLYPH_T,
+  /* D */ GLYPH_EMPTY,
+  /* E */ GLYPH_E,
+  /* F */ GLYPH_PERIOD,
+};
+
+// Prepared strings (see GLYPHS)
+#define GLYPHS_INIT 0xABAC
+#define GLYPHS_CLEAR 0xEEEE
+
+const uint16_t decimal_steps[NUM_DECIMAL_STEPS] = {
+  /* 0 */ 0 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 1 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 2 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 3 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 4 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 5 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 6 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 7 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 8 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+  /* 1 */ 9 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
+};
+
+volatile ERROR_CODE error_code = ERROR_CODE_NONE;
+volatile uint8_t quadrature_state;
+volatile uint16_t position_value = POSITION_UNDEFINED;
+volatile uint16_t last_position_value = POSITION_UNDEFINED;
+
+inline uint16_t degrees_decimal_from_raw_value(uint16_t value) {
+  uint32_t numerator = 360 * 10 * ((uint32_t)value);
+  uint32_t denominator = ENCODER_RAW_VALUE_RANGE;
+  uint32_t result = numerator / denominator;
+  return result;
+}
+
+void isr_quadrature_changed() {
+  quadrature_state = ((quadrature_state << 2) + (digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
+
+  int8_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
+  if (position_change == QUADRATURE_INVALID) {
+    error_code = ERROR_CODE_QUADRATURE;
     return;
   }
-  position += change;
+  position_value += position_change;
 
   // reset using Z pin
-  if (digitalRead(IN_QUAD_Z) == 1) {
-    if (quadrature == 0x7) {
+  if (digitalRead(PIN_IN_QUAD_Z) == 1) {
+    if (quadrature_state == 0x7) {
       // CW Reset
-      position = 0;
-      last_position = (ENCODER_PULSE_PER_REV << 2) - 1;
-    } else if (quadrature == 0xD) {
+      position_value = 0;
+      last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
+    } else if (quadrature_state == 0xD) {
       // CCW reset
-      // position = -1;
-      position = (ENCODER_PULSE_PER_REV << 2) - 1;
-      last_position = 0;
+      position_value = ENCODER_RAW_VALUE_RANGE - 1;
+      last_position_value = 0;
     }
   }
 }
 
-const float DEGREE_PER_CHANGE = 360.0f / ((float)(ENCODER_PULSE_PER_REV << 2));  // times 4 for number of *changes* per revolution
-
-inline float angle_from_position(float pos) {
-  return DEGREE_PER_CHANGE * pos;
-}
-
-uint8_t current_digit = 0;
-
-uint8_t digit_pins[NUM_DIGITS] = {
-  OUT_DIGIT_4,
-  OUT_DIGIT_3,
-  OUT_DIGIT_2,
-  OUT_DIGIT_1,
-};
-
-uint8_t current_segment = 0;
-
-uint8_t segment_pins[NUM_SEGMENTS] = {
-  OUT_SEGMENT_A,
-  OUT_SEGMENT_B,
-  OUT_SEGMENT_C,
-  OUT_SEGMENT_D,
-  OUT_SEGMENT_E,
-  OUT_SEGMENT_F,
-  OUT_SEGMENT_G,
-  OUT_SEGMENT_P,
-};
-
-#define NUM_GLYPHS 16
-
-uint8_t glyphs[NUM_GLYPHS] = {
-  /* i glyphe   PGFEDCBA */
-  /* 0 '0' */ 0b00111111,
-  /* 1 '1' */ 0b00000110,
-  /* 2 '2' */ 0b01011011,
-  /* 3 '3' */ 0b01001111,
-  /* 4 '4' */ 0b01100110,
-  /* 5 '5' */ 0b01101101,
-  /* 6 '6' */ 0b01111101,
-  /* 7 '7' */ 0b00000111,
-  /* 8 '8' */ 0b01111111,
-  /* 9 '9' */ 0b01101111,
-  /* A 'H' */ 0b01110110,
-  /* B 'E' */ 0b01111001,
-  /* C 'L' */ 0b00111000,
-  /* D 'P' */ 0b01110011,
-  /* E '-' */ 0b01000000,
-  /* F '.' */ 0b10000000,
-};
-
-void setup() {
-#if defined(USE_SERIAL)
-  Serial.begin(9600);
-#endif  // USE_SERIAL
-  pinMode(OUT_SEGMENT_A, OUTPUT);
-  pinMode(OUT_SEGMENT_B, OUTPUT);
-  pinMode(OUT_SEGMENT_C, OUTPUT);
-  pinMode(OUT_SEGMENT_D, OUTPUT);
-  pinMode(OUT_SEGMENT_E, OUTPUT);
-  pinMode(OUT_SEGMENT_F, OUTPUT);
-  pinMode(OUT_SEGMENT_G, OUTPUT);
-  pinMode(OUT_SEGMENT_P, OUTPUT);
-  pinMode(OUT_DIGIT_1, OUTPUT);
-  pinMode(OUT_DIGIT_2, OUTPUT);
-  pinMode(OUT_DIGIT_3, OUTPUT);
-  pinMode(OUT_DIGIT_4, OUTPUT);
+void setup_display() {
+  pinMode(PIN_OUT_SEGMENT_A, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_B, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_C, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_D, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_E, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_F, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_G, OUTPUT);
+  pinMode(PIN_OUT_SEGMENT_P, OUTPUT);
+  pinMode(PIN_OUT_DIGIT_1, OUTPUT);
+  pinMode(PIN_OUT_DIGIT_2, OUTPUT);
+  pinMode(PIN_OUT_DIGIT_3, OUTPUT);
+  pinMode(PIN_OUT_DIGIT_4, OUTPUT);
   for (uint8_t index_segment = 0; index_segment < NUM_SEGMENTS; index_segment++) {
-    pinMode(segment_pins[index_segment], OUTPUT);
-    digitalWrite(segment_pins[index_segment], LOW);
+    pinMode(SEGMENT_PINS[index_segment], OUTPUT);
+    digitalWrite(SEGMENT_PINS[index_segment], LOW);
   }
   for (uint8_t index_digit = 0; index_digit < NUM_DIGITS; index_digit++) {
-    pinMode(digit_pins[index_digit], OUTPUT);
-    digitalWrite(digit_pins[index_digit], HIGH);
+    pinMode(DIGIT_PINS[index_digit], OUTPUT);
+    digitalWrite(DIGIT_PINS[index_digit], HIGH);
   }
-#if defined(USE_SERIAL)
-  Serial.print("Angular resolution: ");
-  Serial.print(DEGREE_PER_CHANGE);
-  Serial.println(" degrees per quadrature edge");
-#endif  // USE_SERIAL
-  pinMode(IN_QUAD_Z, INPUT);
-  pinMode(IN_QUAD_A, INPUT);
-  pinMode(IN_QUAD_B, INPUT);
-  quadrature = (((digitalRead(IN_QUAD_B) << 1) + digitalRead(IN_QUAD_A)) << 2) & 0xF;
-  attachInterrupt(digitalPinToInterrupt(IN_QUAD_A), quad_changed, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(IN_QUAD_B), quad_changed, CHANGE);
 }
 
-#define GLYPHS_DEFAULT 0xFFFF
+void setup_encoder() {
+  pinMode(PIN_IN_QUAD_Z, INPUT);
+  pinMode(PIN_IN_QUAD_A, INPUT);
+  pinMode(PIN_IN_QUAD_B, INPUT);
+  quadrature_state = (((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) << 2) & 0xF;
+  attachInterrupt(digitalPinToInterrupt(PIN_IN_QUAD_A), isr_quadrature_changed, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PIN_IN_QUAD_B), isr_quadrature_changed, CHANGE);
+}
 
-#define GLYPHS_INIT 0xEEEE
-
-#define GLYPHS_HELP 0xABCD
-
-void display_glyph(uint8_t index_digit, uint8_t index_glyph) {
-  if (index_digit >= NUM_DIGITS || index_glyph >= NUM_GLYPHS) {
+void display_glyph(uint8_t index_digit, uint8_t glyph_bits) {
+  if (index_digit >= NUM_DIGITS) {
     return;
   }
-  uint8_t glyph = glyphs[index_glyph];
-  uint8_t digit_pin = digit_pins[index_digit];
+  uint8_t digit_pin = DIGIT_PINS[index_digit];
   digitalWrite(digit_pin, LOW);
   for (uint8_t index_bit = 0; index_bit < 8; index_bit++) {
-    uint8_t state = glyph & 0x01;
-    uint8_t segment_pin = segment_pins[index_bit];
+    uint8_t state = glyph_bits & 0x1;
+    uint8_t segment_pin = SEGMENT_PINS[index_bit];
     digitalWrite(segment_pin, state);
     // delay(1);
     digitalWrite(segment_pin, LOW);
-    glyph >>= 1;
+    glyph_bits >>= 1;
   }
   digitalWrite(digit_pin, HIGH);
 }
 
-void display_glyphs(uint16_t value) {
+void display_glyphs(uint16_t value, uint8_t overlay_periods_indices = 0) {
   for (uint8_t index_digit = 0; index_digit < NUM_DIGITS; index_digit++) {
-    uint8_t index_glyph = value & 0x0F;
-    display_glyph(index_digit, index_glyph);
+    uint8_t index_glyph = value & 0xF;
+    uint8_t glyph_bits = GLYPHS[index_glyph];
+    if (overlay_periods_indices & 0x1) {
+      glyph_bits |= GLYPHS[0xF /* '.' */];  // See GLYPH
+    }
+    display_glyph(index_digit, glyph_bits);
     value >>= 4;
+    overlay_periods_indices >>= 1;
   }
 }
 
-uint16_t glyphs_from_uint16(uint16_t value) {
+uint16_t glyphs_from_value(uint16_t value) {
   uint16_t glyphs = 0;
   for (uint8_t index_digit = 0; index_digit < NUM_DIGITS; index_digit++) {
     uint8_t units = value % 10;
@@ -209,51 +273,83 @@ uint16_t glyphs_from_uint16(uint16_t value) {
   return glyphs;
 }
 
-
-void invalid_quadrature() {
-#if defined(USE_SERIAL)
-  Serial.print("Invalid quadrature: ");
-  Serial.println(last_invalid_quadrature);
-#endif  // USE_SERIAL
-  display_glyphs(GLYPHS_HELP);
+uint16_t glyphs_degrees_decimal_from_value(uint16_t value) {
+  uint16_t degrees_decimal = degrees_decimal_from_raw_value(value);
+  uint16_t glyphs = glyphs_from_value(degrees_decimal);
+  return glyphs;
 }
 
-void position_undefined() {
-  display_glyphs(GLYPHS_INIT);
+uint16_t glyphs_from_error(uint16_t error) {
+  uint16_t glyphs = glyphs_from_value(error);
+  uint8_t glyphe_index_E = 0xE /* 'E' */;  // see GLYPHS
+  glyphs |= (glyphe_index_E << 12);
+  return glyphs;
 }
 
-#define DISPLAY_MODE_RAW 0
-
-uint8_t display_mode = DISPLAY_MODE_RAW;
-
-void display_value() {
+void setup() {
 #if defined(USE_SERIAL)
-  if (position != last_position) {
-    last_position = position;
-    Serial.print("pos=");
-    Serial.print(last_position);
-    float angle = angle_from_position(last_position);
-    Serial.print(" angle=");
-    Serial.println(angle);
-  }
+  Serial.begin(9600);
 #endif  // USE_SERIAL
+  setup_display();
+  setup_encoder();
+}
 
-  switch (display_mode) {
-    case DISPLAY_MODE_RAW:
-      display_glyphs(glyphs_from_uint16(position));
-      break;
-    default:
-      display_glyphs(GLYPHS_DEFAULT);
-      break;
-  }
+void serial_debug() {
+#if defined(USE_SERIAL)
+  Serial.print("position_value=");
+  Serial.print(position_value);
+  uint16_t degrees_decimal = degrees_decimal_from_raw_value(position_value);
+  uint16_t degrees_decimal_fraction = degrees_decimal % 10;
+  uint16_t degrees_decimal_integer = (degrees_decimal - degrees_decimal_fraction) / 10;
+  Serial.print("degrees=");
+  Serial.print(degrees_decimal_integer);
+  Serial.print(",");
+  Serial.println(degrees_decimal_fraction);
+#endif  // USE_SERIAL
 }
 
 void loop() {
-  if (last_invalid_quadrature != 0) {
-    invalid_quadrature();
-  } else if (last_position == POSITION_UNDEFINED) {
-    position_undefined();
-  } else {
-    display_value();
+  static DISPLAY_MODE display_mode = DISPLAY_MODE_TEST;
+  static uint16_t display_position_value = POSITION_UNDEFINED;
+
+  if (last_position_value != POSITION_UNDEFINED) {
+    if (position_value != last_position_value) {
+      last_position_value = position_value;
+      serial_debug();
+    }
+    display_position_value = last_position_value; /* use a non volatile variable for later processing */
+  }
+
+  if (error_code != ERROR_CODE_NONE) {
+    display_mode = DISPLAY_MODE_ERROR;
+  }
+
+  switch (display_mode) {
+    case DISPLAY_MODE_TEST:
+      display_glyphs(glyphs_from_value(8888), 0b1111 /* overlay period on each digit */);
+      if (millis() > DISPLAY_MODE_TEST_DURATION_MS) {
+        display_mode = DISPLAY_MODE_INIT;
+      }
+      break;
+    case DISPLAY_MODE_INIT:
+      display_glyphs(GLYPHS_INIT);
+      if (display_position_value != POSITION_UNDEFINED) {
+        display_mode = DISPLAY_MODE_DEGREES;
+      }
+      break;
+    case DISPLAY_MODE_RPM:
+      display_glyphs(GLYPHS_CLEAR); /* TODO */
+      break;
+    case DISPLAY_MODE_DEGREES:
+      display_glyphs(glyphs_degrees_decimal_from_value(display_position_value), 0b0010 /* overlay period on second-to-last digit */);
+      break;
+    case DISPLAY_MODE_RAW:
+      display_glyphs(glyphs_from_value(display_position_value), 0b1111 /* overlay period on each digit */);
+      break;
+    case DISPLAY_MODE_ERROR:
+      display_glyphs(glyphs_from_error(error_code));
+      break;
+    default:
+      break;
   }
 }
