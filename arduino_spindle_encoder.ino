@@ -1,18 +1,34 @@
 #define ENCODER_PULSE_PER_REV 1024
 
-const int PIN_A = 2;
-const int PIN_B = 3;
-const int PIN_Z = 4;
+#define IN_QUAD_A 2
+#define IN_QUAD_B 3
+#define IN_QUAD_Z 4
 
-volatile short position = 0;
+#define NUM_SEGMENTS 8
+#define OUT_SEGMENT_A 5
+#define OUT_SEGMENT_B 6
+#define OUT_SEGMENT_C 7
+#define OUT_SEGMENT_D 8
+#define OUT_SEGMENT_E 9
+#define OUT_SEGMENT_F 10
+#define OUT_SEGMENT_G 11
+#define OUT_SEGMENT_P 12
 
-short last_position = 0;
+#define NUM_DIGITS 4
+#define OUT_DIGIT_1 A0
+#define OUT_DIGIT_2 A1
+#define OUT_DIGIT_3 A2
+#define OUT_DIGIT_4 A3
 
-volatile int quadrature = 0;
+volatile int16_t position = 0;
 
-volatile int last_invalid_quadrature = 0;
+int16_t last_position = 0;
 
-char delta[16] = {
+volatile uint8_t quadrature = 0;
+
+volatile uint8_t last_invalid_quadrature = 0;
+
+int8_t delta[16] = {
   /* i old new        */
   /*    ba BA         */
   /* 0  00 00 same    */ 0,
@@ -34,9 +50,9 @@ char delta[16] = {
 };
 
 void quad_changed() {
-  quadrature = ((quadrature << 2) + (digitalRead(PIN_B) << 1) + digitalRead(PIN_A)) & 0xF;
+  quadrature = ((quadrature << 2) + (digitalRead(IN_QUAD_B) << 1) + digitalRead(IN_QUAD_A)) & 0xF;
 
-  int change = delta[quadrature];
+  int8_t change = delta[quadrature];
   if (change >= 2) {
     last_invalid_quadrature = quadrature;
     return;
@@ -44,7 +60,7 @@ void quad_changed() {
   position += change;
 
   // reset using Z pin
-  if (digitalRead(PIN_Z) == 1) {
+  if (digitalRead(IN_QUAD_Z) == 1) {
     if (quadrature == 0x7) {
       // CW Reset
       position = 0;
@@ -61,21 +77,62 @@ inline float angle_from_position(float pos) {
   return DEGREE_PER_CHANGE * pos;
 }
 
+uint8_t current_digit = 0;
+
+uint8_t digit_pins[NUM_DIGITS] = {
+  OUT_DIGIT_1,
+  OUT_DIGIT_2,
+  OUT_DIGIT_3,
+  OUT_DIGIT_4,
+};
+
+uint8_t current_segment = 0;
+
+uint8_t segment_pins[NUM_SEGMENTS] = {
+  OUT_SEGMENT_A,
+  OUT_SEGMENT_B,
+  OUT_SEGMENT_C,
+  OUT_SEGMENT_D,
+  OUT_SEGMENT_E,
+  OUT_SEGMENT_F,
+  OUT_SEGMENT_G,
+  OUT_SEGMENT_P,
+};
+
 void setup() {
   Serial.begin(9600);
+  pinMode(OUT_SEGMENT_A, OUTPUT);
+  pinMode(OUT_SEGMENT_B, OUTPUT);
+  pinMode(OUT_SEGMENT_C, OUTPUT);
+  pinMode(OUT_SEGMENT_D, OUTPUT);
+  pinMode(OUT_SEGMENT_E, OUTPUT);
+  pinMode(OUT_SEGMENT_F, OUTPUT);
+  pinMode(OUT_SEGMENT_G, OUTPUT);
+  pinMode(OUT_SEGMENT_P, OUTPUT);
+  pinMode(OUT_DIGIT_1, OUTPUT);
+  pinMode(OUT_DIGIT_2, OUTPUT);
+  pinMode(OUT_DIGIT_3, OUTPUT);
+  pinMode(OUT_DIGIT_4, OUTPUT);
+  for (uint8_t i = 0; i < NUM_SEGMENTS; i++) {
+    pinMode(segment_pins[i], OUTPUT);
+    digitalWrite(segment_pins[i], LOW);
+  }
+  for (uint8_t i = 0; i < NUM_DIGITS; i++) {
+    pinMode(digit_pins[i], OUTPUT);
+    digitalWrite(digit_pins[i], HIGH);
+  }
   Serial.print("Angular resolution: ");
   Serial.print(DEGREE_PER_CHANGE);
   Serial.println(" degrees per quadrature edge");
-  pinMode(PIN_Z, INPUT);
-  pinMode(PIN_A, INPUT);
-  pinMode(PIN_B, INPUT);
-  quadrature = (((digitalRead(PIN_B) << 1) + digitalRead(PIN_A)) << 2) & 0xF;
-  attachInterrupt(digitalPinToInterrupt(PIN_A), quad_changed, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(PIN_B), quad_changed, CHANGE);
+  pinMode(IN_QUAD_Z, INPUT);
+  pinMode(IN_QUAD_A, INPUT);
+  pinMode(IN_QUAD_B, INPUT);
+  quadrature = (((digitalRead(IN_QUAD_B) << 1) + digitalRead(IN_QUAD_A)) << 2) & 0xF;
+  attachInterrupt(digitalPinToInterrupt(IN_QUAD_A), quad_changed, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(IN_QUAD_B), quad_changed, CHANGE);
 }
 
 void loop() {
-  delay(100);
 
   if (last_invalid_quadrature != 0) {
     Serial.print("Invalid quadrature: ");
@@ -88,5 +145,24 @@ void loop() {
     float angle = angle_from_position(last_position);
     Serial.print(angle);
     Serial.println("°");
+  }
+
+  digitalWrite(digit_pins[current_digit], LOW);
+  digitalWrite(segment_pins[current_segment], HIGH);
+
+  delay(100);
+
+  digitalWrite(segment_pins[current_segment], LOW);
+  digitalWrite(digit_pins[current_digit], HIGH);
+
+  current_segment++;
+
+  if (current_segment == NUM_SEGMENTS) {
+    current_segment = 0;
+    current_digit++;
+  }
+
+  if (current_digit == NUM_DIGITS) {
+    current_digit = 0;
   }
 }
