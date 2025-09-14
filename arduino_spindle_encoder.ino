@@ -200,30 +200,25 @@ uint16_t degrees_decimal_from_raw_value(uint16_t value) {
 }
 
 void isr_quadrature_changed() {
+  // lookup quadrature case situation
   quadrature_state = ((quadrature_state << 2) + (digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
-
   int8_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
+  // check for errors
   if (position_change == QUADRATURE_INVALID) {
     error_code = ERROR_CODE_QUADRATURE;
     return;
   }
+  // update position accordingly
   position_value += position_change;
-  if (position_value > ENCODER_RAW_VALUE_RANGE) {
+  if (position_value >= ENCODER_RAW_VALUE_RANGE) {
     position_value -= position_value;
   }
-
-  // reset using Z pin
+  // handle specific reset using Z pin
   if (digitalRead(PIN_IN_QUAD_Z) == 1) {
-    if (quadrature_state == 0x7) {
+    if (quadrature_state == 0x7 /* from CW waveform */) {
       position_clockwise_reset();
-      // CW Reset
-      // position_value = 0;
-      // last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
-    } else if (quadrature_state == 0xD) {
+    } else if (quadrature_state == 0xD /* from CCW waveform */) {
       position_counter_clockwise_reset();
-      // CCW reset
-      // position_value = ENCODER_RAW_VALUE_RANGE - 1;
-      // last_position_value = 0;
     }
   }
 }
@@ -324,7 +319,9 @@ void setup() {
 
 void loop() {
   static DISPLAY_MODE display_mode = DISPLAY_MODE_TEST;
-  static uint16_t display_position_value = POSITION_UNDEFINED;
+  static uint16_t current_position_value = POSITION_UNDEFINED;
+  static uint16_t position_value_relative_zero = 0;
+
   static DEBOUNCED_BUTTON button_pullup = { PIN_IN_BUTTON_PULLUP, HIGH, HIGH, 0L };
 
   // handle initialization
@@ -332,8 +329,10 @@ void loop() {
     if (position_value != last_position_value) {
       last_position_value = position_value;
     }
-    display_position_value = last_position_value; /* use a non volatile variable for later processing */
   }
+
+  // use a non volatile variable for later processing
+  current_position_value = position_value;
 
   // handle button
   uint32_t current_ms = millis();
@@ -372,13 +371,19 @@ void loop() {
     if (button_pullup.current_value == LOW) {
       // button is pressed
       if (duration_ms > BUTTON_LONG_MS) {
-        // it was a long press
+        // it is a long press
         if (display_mode == DISPLAY_MODE_DEGREES || display_mode == DISPLAY_MODE_RAW) {
-          // re-home
-          position_clockwise_reset();
+          // use current position as base for relative moves
+          position_value_relative_zero = current_position_value;
         }
       }
     }
+  }
+
+  // use stored value as new zero for relative work
+  current_position_value += ENCODER_RAW_VALUE_RANGE - position_value_relative_zero;
+  if (current_position_value >= ENCODER_RAW_VALUE_RANGE) {
+    current_position_value -= ENCODER_RAW_VALUE_RANGE;
   }
 
   // prioritize errors
@@ -395,7 +400,7 @@ void loop() {
       break;
     case DISPLAY_MODE_INIT:
       display_glyphs(GLYPHS_INIT);
-      if (display_position_value != POSITION_UNDEFINED) {
+      if (last_position_value != POSITION_UNDEFINED) {
         display_mode = DISPLAY_MODE_RAW;
       }
       break;
@@ -403,10 +408,10 @@ void loop() {
       display_glyphs(glyphs_from_value(1234)); /* TODO */
       break;
     case DISPLAY_MODE_DEGREES:
-      display_glyphs(glyphs_degrees_decimal_from_value(display_position_value), 0b0010 /* overlay period on second-to-last digit */);
+      display_glyphs(glyphs_degrees_decimal_from_value(current_position_value), 0b0010 /* overlay period on second-to-last digit */);
       break;
     case DISPLAY_MODE_RAW:
-      display_glyphs(glyphs_from_value(display_position_value), 0b1111 /* overlay period on each digit */);
+      display_glyphs(glyphs_from_value(current_position_value), 0b1111 /* overlay period on each digit */);
       break;
     case DISPLAY_MODE_ERROR:
       display_glyphs(glyphs_from_error(error_code));
