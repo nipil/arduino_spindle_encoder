@@ -228,7 +228,7 @@ void isr_quadrature_changed() {
   // update position accordingly
   position_value += position_change;
   if (position_value >= ENCODER_RAW_VALUE_RANGE) {
-    position_value -= position_value;
+    position_value -= ENCODER_RAW_VALUE_RANGE;
   }
 #if defined(USE_Z_RESET)
   // handle specific reset using Z pin
@@ -347,18 +347,8 @@ void loop() {
 #endif  // USE_Z_RESET
   static uint16_t position_value_relative_zero = 0;
 
+  // initialize persistant button state
   static DEBOUNCED_BUTTON button_pullup = { PIN_IN_BUTTON_PULLUP, HIGH, HIGH, 0L };
-
-#if defined(USE_Z_RESET)
-  // handle initialization
-  if (last_position_value != POSITION_UNDEFINED) {
-#endif  // USE_Z_RESET
-    if (position_value != last_position_value) {
-      last_position_value = position_value;
-    }
-#if defined(USE_Z_RESET)
-  }
-#endif  // USE_Z_RESET
 
   // use a non volatile variable for later processing
   current_position_value = position_value;
