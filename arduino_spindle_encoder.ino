@@ -1,6 +1,11 @@
-/************************* customize code *************************/
+/************************* customizable code *************************/
 
 // #define USE_SERIAL
+
+// Button pin
+#define PIN_IN_BUTTON_PULLUP A4
+#define BUTTON_DEBOUNCE_MS 100
+#define BUTTON_LONG_MS 1000
 
 // Encoder pins
 #define PIN_IN_QUAD_A 2
@@ -47,10 +52,10 @@
 #define DISPLAY_MODE_TEST_DURATION_MS 1000
 
 // Quadrature actions
-#define QUADRATURE_CW_INCREMENT (+1)
-#define QUADRATURE_CCW_DECREMENT (-1)
-#define QUADRATURE_NOOP (0)
-#define QUADRATURE_INVALID (2)
+#define QUADRATURE_NOOP 0
+#define QUADRATURE_CLOCKWISE 1
+#define QUADRATURE_COUNTER_CLOCKWISE (ENCODER_RAW_VALUE_RANGE - 1)
+#define QUADRATURE_INVALID 2
 
 // bit order:     PGFEDCBA
 #define GLYPH_0 0b00111111
@@ -89,24 +94,31 @@ typedef enum {
   DISPLAY_MODE_MAX
 } DISPLAY_MODE;
 
-const int8_t QUADRATURE_LOOKUPS[NUM_QUADRATURE_LOOKUPS] = {
+typedef struct {
+  uint8_t pin_number;
+  uint8_t last_value;
+  uint8_t current_value;
+  uint32_t last_change_ms;
+} DEBOUNCED_BUTTON;
+
+const int16_t QUADRATURE_LOOKUPS[NUM_QUADRATURE_LOOKUPS] = {
   /* i old new        */
   /*    ba BA         */
   /* 0  00 00 same    */ QUADRATURE_NOOP,
-  /* 1  00 01 cw 1    */ QUADRATURE_CW_INCREMENT,
-  /* 2  00 10 ccw 1   */ QUADRATURE_CCW_DECREMENT,
+  /* 1  00 01 cw 1    */ QUADRATURE_CLOCKWISE,
+  /* 2  00 10 ccw 1   */ QUADRATURE_COUNTER_CLOCKWISE,
   /* 3  00 11 invalid */ QUADRATURE_INVALID,
-  /* 4  01 00 ccw 4   */ QUADRATURE_CCW_DECREMENT,
+  /* 4  01 00 ccw 4   */ QUADRATURE_COUNTER_CLOCKWISE,
   /* 5  01 01 same    */ QUADRATURE_NOOP,
   /* 6  01 10 invalid */ QUADRATURE_INVALID,
-  /* 7  01 11 cw 2    */ QUADRATURE_CW_INCREMENT, /* Z=1 cw */
-  /* 8  10 00 cw 4    */ QUADRATURE_CW_INCREMENT,
+  /* 7  01 11 cw 2    */ QUADRATURE_CLOCKWISE, /* Z=1 cw */
+  /* 8  10 00 cw 4    */ QUADRATURE_CLOCKWISE,
   /* 9  10 01 invalid */ QUADRATURE_INVALID,
   /* A  10 10 same    */ QUADRATURE_NOOP,
-  /* B  10 11 ccw 2   */ QUADRATURE_CCW_DECREMENT,
+  /* B  10 11 ccw 2   */ QUADRATURE_COUNTER_CLOCKWISE,
   /* C  11 00 invalid */ QUADRATURE_INVALID,
-  /* D  11 01 ccw 3   */ QUADRATURE_CCW_DECREMENT, /* Z=1 ccw */
-  /* E  11 10 cw 3    */ QUADRATURE_CW_INCREMENT,  /* Z=1 cw */
+  /* D  11 01 ccw 3   */ QUADRATURE_COUNTER_CLOCKWISE, /* Z=1 ccw */
+  /* E  11 10 cw 3    */ QUADRATURE_CLOCKWISE,         /* Z=1 cw */
   /* F  11 11 same    */ QUADRATURE_NOOP
 };
 
@@ -170,7 +182,17 @@ volatile uint8_t quadrature_state;
 volatile uint16_t position_value = POSITION_UNDEFINED;
 volatile uint16_t last_position_value = POSITION_UNDEFINED;
 
-inline uint16_t degrees_decimal_from_raw_value(uint16_t value) {
+void position_clockwise_reset() {
+  position_value = 0;
+  last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
+}
+
+void position_counter_clockwise_reset() {
+  position_value = ENCODER_RAW_VALUE_RANGE - 1;
+  last_position_value = 0;
+}
+
+uint16_t degrees_decimal_from_raw_value(uint16_t value) {
   uint32_t numerator = 360 * 10 * ((uint32_t)value);
   uint32_t denominator = ENCODER_RAW_VALUE_RANGE;
   uint32_t result = numerator / denominator;
@@ -186,17 +208,22 @@ void isr_quadrature_changed() {
     return;
   }
   position_value += position_change;
+  if (position_value > ENCODER_RAW_VALUE_RANGE) {
+    position_value -= position_value;
+  }
 
   // reset using Z pin
   if (digitalRead(PIN_IN_QUAD_Z) == 1) {
     if (quadrature_state == 0x7) {
+      position_clockwise_reset();
       // CW Reset
-      position_value = 0;
-      last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
+      // position_value = 0;
+      // last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
     } else if (quadrature_state == 0xD) {
+      position_counter_clockwise_reset();
       // CCW reset
-      position_value = ENCODER_RAW_VALUE_RANGE - 1;
-      last_position_value = 0;
+      // position_value = ENCODER_RAW_VALUE_RANGE - 1;
+      // last_position_value = 0;
     }
   }
 }
@@ -292,34 +319,69 @@ void setup() {
 #endif  // USE_SERIAL
   setup_display();
   setup_encoder();
-}
-
-void serial_debug() {
-#if defined(USE_SERIAL)
-  Serial.print("position_value=");
-  Serial.print(position_value);
-  uint16_t degrees_decimal = degrees_decimal_from_raw_value(position_value);
-  uint16_t degrees_decimal_fraction = degrees_decimal % 10;
-  uint16_t degrees_decimal_integer = (degrees_decimal - degrees_decimal_fraction) / 10;
-  Serial.print("degrees=");
-  Serial.print(degrees_decimal_integer);
-  Serial.print(",");
-  Serial.println(degrees_decimal_fraction);
-#endif  // USE_SERIAL
+  pinMode(PIN_IN_BUTTON_PULLUP, INPUT);
 }
 
 void loop() {
   static DISPLAY_MODE display_mode = DISPLAY_MODE_TEST;
   static uint16_t display_position_value = POSITION_UNDEFINED;
+  static DEBOUNCED_BUTTON button_pullup = { PIN_IN_BUTTON_PULLUP, HIGH, HIGH, 0L };
 
+  // handle initialization
   if (last_position_value != POSITION_UNDEFINED) {
     if (position_value != last_position_value) {
       last_position_value = position_value;
-      serial_debug();
     }
     display_position_value = last_position_value; /* use a non volatile variable for later processing */
   }
 
+  // handle button
+  uint32_t current_ms = millis();
+  uint32_t duration_ms = current_ms - button_pullup.last_change_ms;
+  button_pullup.current_value = digitalRead(button_pullup.pin_number);
+  if (button_pullup.current_value != button_pullup.last_value) {
+    // button has changed
+    button_pullup.last_value = button_pullup.current_value;
+    button_pullup.last_change_ms = current_ms;
+
+    if (button_pullup.current_value == HIGH) {
+      // button has been released
+      if (duration_ms > BUTTON_DEBOUNCE_MS && duration_ms < BUTTON_LONG_MS) {
+        // it was a short press
+        switch (display_mode) {
+          case DISPLAY_MODE_RPM:
+            display_mode = DISPLAY_MODE_DEGREES;
+            break;
+          case DISPLAY_MODE_DEGREES:
+            display_mode = DISPLAY_MODE_RAW;
+            break;
+          case DISPLAY_MODE_RAW:
+            display_mode = DISPLAY_MODE_RPM;
+            break;
+          case DISPLAY_MODE_ERROR:
+            // clear error and return to default mode
+            error_code = ERROR_CODE_NONE;
+            display_mode = DISPLAY_MODE_RPM;
+          default:
+            break;
+        }
+      }
+    }
+  } else {
+    // button has not changed
+    if (button_pullup.current_value == LOW) {
+      // button is pressed
+      if (duration_ms > BUTTON_LONG_MS) {
+        // it was a long press
+        if (display_mode == DISPLAY_MODE_DEGREES || display_mode == DISPLAY_MODE_RAW) {
+          // re-home
+          position_clockwise_reset();
+        }
+      }
+    }
+  }
+
+  // prioritize errors
   if (error_code != ERROR_CODE_NONE) {
     display_mode = DISPLAY_MODE_ERROR;
   }
@@ -334,11 +396,11 @@ void loop() {
     case DISPLAY_MODE_INIT:
       display_glyphs(GLYPHS_INIT);
       if (display_position_value != POSITION_UNDEFINED) {
-        display_mode = DISPLAY_MODE_DEGREES;
+        display_mode = DISPLAY_MODE_RAW;
       }
       break;
     case DISPLAY_MODE_RPM:
-      display_glyphs(GLYPHS_CLEAR); /* TODO */
+      display_glyphs(glyphs_from_value(1234)); /* TODO */
       break;
     case DISPLAY_MODE_DEGREES:
       display_glyphs(glyphs_degrees_decimal_from_value(display_position_value), 0b0010 /* overlay period on second-to-last digit */);
