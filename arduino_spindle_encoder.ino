@@ -1,6 +1,7 @@
 /************************* customizable code *************************/
 
 // #define USE_SERIAL
+// #define USE_Z_RESET
 
 // Button pin
 #define PIN_IN_BUTTON_PULLUP A4
@@ -10,7 +11,9 @@
 // Encoder pins
 #define PIN_IN_QUAD_A 2
 #define PIN_IN_QUAD_B 3
+#if defined(USE_Z_RESET)
 #define PIN_IN_QUAD_Z 4
+#endif  // USE_Z_RESET
 
 // Display pins
 #define NUM_SEGMENTS 8
@@ -42,8 +45,10 @@
 // = 4 bits of index for the lookup table
 #define NUM_QUADRATURE_LOOKUPS (1 << 4)
 
+#if defined(USE_Z_RESET)
 // Do not process until homed
 #define POSITION_UNDEFINED 0xFFFF
+#endif  // USE_Z_RESET
 
 // Angle decimals
 #define NUM_DECIMAL_STEPS 10
@@ -86,7 +91,9 @@ typedef enum {
 
 typedef enum {
   DISPLAY_MODE_TEST = 0,
+#if defined(USE_Z_RESET)
   DISPLAY_MODE_INIT,
+#endif  // USE_Z_RESET
   DISPLAY_MODE_RPM,
   DISPLAY_MODE_DEGREES,
   DISPLAY_MODE_RAW,
@@ -161,8 +168,9 @@ const uint8_t GLYPHS[NUM_GLYPHS] = {
 };
 
 // Prepared strings (see GLYPHS)
+#if defined(USE_Z_RESET)
 #define GLYPHS_INIT 0xABAC
-#define GLYPHS_CLEAR 0xEEEE
+#endif  // USE_Z_RESET
 
 const uint16_t decimal_steps[NUM_DECIMAL_STEPS] = {
   /* 0 */ 0 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
@@ -179,18 +187,27 @@ const uint16_t decimal_steps[NUM_DECIMAL_STEPS] = {
 
 volatile ERROR_CODE error_code = ERROR_CODE_NONE;
 volatile uint8_t quadrature_state;
+#if defined(USE_Z_RESET)
 volatile uint16_t position_value = POSITION_UNDEFINED;
 volatile uint16_t last_position_value = POSITION_UNDEFINED;
+#else
+volatile uint16_t position_value = 0;
+volatile uint16_t last_position_value = 0;
+#endif  // USE_Z_RESET
 
+#if defined(USE_Z_RESET)
 void position_clockwise_reset() {
   position_value = 0;
   last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
 }
+#endif  // USE_Z_RESET
 
+#if defined(USE_Z_RESET)
 void position_counter_clockwise_reset() {
   position_value = ENCODER_RAW_VALUE_RANGE - 1;
   last_position_value = 0;
 }
+#endif  // USE_Z_RESET
 
 uint16_t degrees_decimal_from_raw_value(uint16_t value) {
   uint32_t numerator = 360 * 10 * ((uint32_t)value);
@@ -213,6 +230,7 @@ void isr_quadrature_changed() {
   if (position_value >= ENCODER_RAW_VALUE_RANGE) {
     position_value -= position_value;
   }
+#if defined(USE_Z_RESET)
   // handle specific reset using Z pin
   if (digitalRead(PIN_IN_QUAD_Z) == 1) {
     if (quadrature_state == 0x7 /* from CW waveform */) {
@@ -221,6 +239,7 @@ void isr_quadrature_changed() {
       position_counter_clockwise_reset();
     }
   }
+#endif  // USE_Z_RESET
 }
 
 void setup_display() {
@@ -247,7 +266,9 @@ void setup_display() {
 }
 
 void setup_encoder() {
+#if defined(USE_Z_RESET)
   pinMode(PIN_IN_QUAD_Z, INPUT);
+#endif  // USE_Z_RESET
   pinMode(PIN_IN_QUAD_A, INPUT);
   pinMode(PIN_IN_QUAD_B, INPUT);
   quadrature_state = (((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) << 2) & 0xF;
@@ -319,17 +340,25 @@ void setup() {
 
 void loop() {
   static DISPLAY_MODE display_mode = DISPLAY_MODE_TEST;
+#if defined(USE_Z_RESET)
   static uint16_t current_position_value = POSITION_UNDEFINED;
+#else
+  static uint16_t current_position_value = 0;
+#endif  // USE_Z_RESET
   static uint16_t position_value_relative_zero = 0;
 
   static DEBOUNCED_BUTTON button_pullup = { PIN_IN_BUTTON_PULLUP, HIGH, HIGH, 0L };
 
+#if defined(USE_Z_RESET)
   // handle initialization
   if (last_position_value != POSITION_UNDEFINED) {
+#endif  // USE_Z_RESET
     if (position_value != last_position_value) {
       last_position_value = position_value;
     }
+#if defined(USE_Z_RESET)
   }
+#endif  // USE_Z_RESET
 
   // use a non volatile variable for later processing
   current_position_value = position_value;
@@ -395,15 +424,21 @@ void loop() {
     case DISPLAY_MODE_TEST:
       display_glyphs(glyphs_from_value(8888), 0b1111 /* overlay period on each digit */);
       if (millis() > DISPLAY_MODE_TEST_DURATION_MS) {
+#if defined(USE_Z_RESET)
         display_mode = DISPLAY_MODE_INIT;
+#else
+        display_mode = DISPLAY_MODE_RAW; /* TODO: default to RPM */
+#endif  // USE_Z_RESET
       }
       break;
+#if defined(USE_Z_RESET)
     case DISPLAY_MODE_INIT:
       display_glyphs(GLYPHS_INIT);
       if (last_position_value != POSITION_UNDEFINED) {
-        display_mode = DISPLAY_MODE_RAW;
+        display_mode = DISPLAY_MODE_RAW; /* TODO: default to RPM */
       }
       break;
+#endif  // USE_Z_RESET
     case DISPLAY_MODE_RPM:
       display_glyphs(glyphs_from_value(1234)); /* TODO */
       break;
