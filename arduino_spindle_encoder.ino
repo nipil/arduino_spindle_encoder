@@ -1,7 +1,11 @@
 /************************* customizable code *************************/
 
-// #define USE_SERIAL
+// Using an encoder with a Z pin allows for a "fixed" homing
+// This allows your position to be found again after a power loss
 // #define USE_Z_RESET
+
+// In case you want to debug something, guard it with this macro for easy disabling
+// #define USE_SERIAL
 
 // Button pin
 #define PIN_IN_BUTTON_PULLUP A4
@@ -59,7 +63,7 @@
 // Quadrature actions
 #define QUADRATURE_NOOP 0
 #define QUADRATURE_CLOCKWISE 1
-#define QUADRATURE_COUNTER_CLOCKWISE (ENCODER_RAW_VALUE_RANGE - 1)
+#define QUADRATURE_COUNTER_CLOCKWISE (-1)
 #define QUADRATURE_INVALID 2
 
 // bit order:     PGFEDCBA
@@ -108,7 +112,7 @@ typedef struct {
   uint32_t last_change_ms;
 } DEBOUNCED_BUTTON;
 
-const int16_t QUADRATURE_LOOKUPS[NUM_QUADRATURE_LOOKUPS] = {
+const int8_t QUADRATURE_LOOKUPS[NUM_QUADRATURE_LOOKUPS] = {
   /* i old new        */
   /*    ba BA         */
   /* 0  00 00 same    */ QUADRATURE_NOOP,
@@ -218,13 +222,16 @@ uint16_t degrees_decimal_from_raw_value(uint16_t value) {
 void isr_quadrature_changed() {
   // lookup quadrature case situation
   quadrature_state = ((quadrature_state << 2) + (digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
-  uint16_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
+  int8_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
   // check for errors
   if (position_change == QUADRATURE_INVALID) {
     error_code = ERROR_CODE_QUADRATURE;
     return;
   }
   // update position accordingly
+  if (position_change < 0) {
+    position_value += ENCODER_RAW_VALUE_RANGE;
+  }
   position_value += position_change;
   if (position_value >= ENCODER_RAW_VALUE_RANGE) {
     position_value -= ENCODER_RAW_VALUE_RANGE;
