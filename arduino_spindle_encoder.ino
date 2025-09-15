@@ -61,6 +61,7 @@
 #define DISPLAY_MODE_TEST_DURATION_MS 1000
 
 // Quadrature actions
+#define QUADRATURE_INIT 0xFF
 #define QUADRATURE_NOOP 0
 #define QUADRATURE_CLOCKWISE 1
 #define QUADRATURE_COUNTER_CLOCKWISE (-1)
@@ -190,7 +191,7 @@ const uint16_t decimal_steps[NUM_DECIMAL_STEPS] = {
 };
 
 volatile ERROR_CODE error_code = ERROR_CODE_NONE;
-volatile uint8_t quadrature_state;
+volatile uint8_t quadrature_state = QUADRATURE_INIT;
 #if defined(USE_Z_RESET)
 volatile uint16_t position_value = POSITION_UNDEFINED;
 volatile bool position_initialized = false;
@@ -220,8 +221,12 @@ uint16_t degrees_decimal_from_raw_value(uint16_t value) {
 }
 
 void isr_quadrature_changed() {
-  // lookup quadrature case situation
-  quadrature_state = ((quadrature_state << 2) + (digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
+  // compute quadrature state
+  uint8_t new_quadrature_state = ((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
+  if (quadrature_state == QUADRATURE_INIT) {
+    quadrature_state = new_quadrature_state;
+  }
+  quadrature_state = ((quadrature_state << 2) + new_quadrature_state) & 0xF;
   int8_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
   // check for errors
   if (position_change == QUADRATURE_INVALID) {
@@ -277,7 +282,6 @@ void setup_encoder() {
 #endif  // USE_Z_RESET
   pinMode(PIN_IN_QUAD_A, INPUT);
   pinMode(PIN_IN_QUAD_B, INPUT);
-  quadrature_state = (((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) << 2) & 0xF;
   attachInterrupt(digitalPinToInterrupt(PIN_IN_QUAD_A), isr_quadrature_changed, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_IN_QUAD_B), isr_quadrature_changed, CHANGE);
 }
