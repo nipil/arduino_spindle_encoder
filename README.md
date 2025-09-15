@@ -22,7 +22,7 @@ Available functionalities :
 
 # Breadboard prototype
 
-[]!(breadboard.svg)
+![](breadboard.svg)
 
 # Limitations
 
