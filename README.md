@@ -1,9 +1,35 @@
 # Arduino Spindle Encoder
 
-This is the design and files for a lathe spindle encoder, which can be used to :
+This is the design and files for a lathe spindle encoder.
+
+Available functionalities :
 
 - use the lathe's spindle as a **dividing head** for various circular patterns
-- monitor **real spindle speed** (in case of a VFD or DC motor)
+  - accurate angular positionning with a 0.1 degrees step
+  - setting zero by long button press (in angular mode only)
+  - optional : absolute encoder mode (requires Z pin on encoder and activating a #define)
+
+- monitor **real spindle speed**
+  - real time display in rotation par minute display (RPM)
+  - useful in case of a VFD or DC motor or to monitor motor load during work
+  - works in forward and reverse
+
+- optional : raw encoder value display
+
+- optional : interrupt service routine timing via LED BUILTIN pin
+
+# Limitations
+
+- display is limited to 4 digits
+  - max 9999 RPM then overflow
+  - do not use encoders with more than 2000 pulses per revolution
+  - 1-digit precision (and display) for angular degrees of rotation
+
+- encoder output bandwitch
+  - maximum output frequency is 100kHz for the reference below
+  - you choice of PPR must satisfy `RPM * 4 * PPR / 60 < 100_000`
+  - because 1 rotation = 4 * number of pulse per revolution = events
+  - to chose your encoder PPR, check `desired_RPM * PPR < 1 500 000`
 
 # Components
 
@@ -18,12 +44,20 @@ This is the design and files for a lathe spindle encoder, which can be used to :
 - User interface
   - 1x momentary normally open push button
   - 1x 10k ohm resistor for push button pullup
+- Data input
+  - 2x to 3x **3.3k** ohm pullup resistors for the rotary encoder
+  - I chose a **strong pullup** because encoder might be in a noisy environment
+- Connections
+  - 6x to 10x scren terminals
+    - 2x for button
+    - 2x power supply / power switch
+    - 4x to 6x for rotary encoder (VCC/GND/A/B + shield + Z)
 
 # Requirements
 
 - Electrical characteristics
   - 5V power supply (adapt the display resistors in case of a 3.3V MCU)
-  - Consumes ??? mA
+  - Consumes 26 milli-amperes when the Arduino UNO rev3 is powered from Vin @5V
 
 - Pins
   - 12 digital output pins to directly drive the display (8 segments + 4 digits)

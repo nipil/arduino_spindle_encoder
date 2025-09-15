@@ -10,7 +10,6 @@
 // Button pin
 #define PIN_IN_BUTTON_PULLUP A4
 
-
 // Encoder pins
 #define PIN_IN_QUAD_A 2
 #define PIN_IN_QUAD_B 3
@@ -34,12 +33,16 @@
 #define PIN_OUT_DIGIT_3 A2
 #define PIN_OUT_DIGIT_4 A3
 
+// (UNCOMMENT TO ACTIVATE) Use led pin to scope for interrupt duration
+// #define PIN_OUT_ISR_WAVEFORM LED_BUILTIN
+
 // Timings
 #define BUTTON_DEBOUNCE_MS 100
 #define BUTTON_LONG_MS 1000
 #define RPM_REFRESH_INTERVAL_MS 500
 
-// In case you want to trace something, add your code and guard it with this macro for easy disabling
+// (UNCOMMENT TO ACTIVATE) In case you want to print something on the serial
+// and guard your printing code with #ifdef/#endif for easy deactivation
 // #define USE_SERIAL
 
 /************************* generic code *************************/
@@ -271,6 +274,11 @@ uint16_t rpm_from_counters(uint32_t current_counter, uint32_t last_counter, uint
 }
 
 void isr_quadrature_changed() {
+#if defined(PIN_OUT_ISR_WAVEFORM)
+  // Start ISR pulse
+  digitalWrite(PIN_OUT_ISR_WAVEFORM, HIGH);
+#endif  // PIN_OUT_ISR_WAVEFORM
+
   // compute quadrature state
   uint8_t new_quadrature_state = ((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
   if (quadrature_state == QUADRATURE_INIT) {
@@ -281,6 +289,10 @@ void isr_quadrature_changed() {
   // check for errors
   if (position_change == QUADRATURE_INVALID) {
     error_code = ERROR_CODE_QUADRATURE;
+#if defined(PIN_OUT_ISR_WAVEFORM)
+    // Stop ISR pulse
+    digitalWrite(PIN_OUT_ISR_WAVEFORM, LOW);
+#endif  // PIN_OUT_ISR_WAVEFORM
     return;
   }
 
@@ -314,6 +326,11 @@ void isr_quadrature_changed() {
     }
   }
 #endif  // USE_Z_RESET
+
+#if defined(PIN_OUT_ISR_WAVEFORM)
+  // Stop ISR pulse
+  digitalWrite(PIN_OUT_ISR_WAVEFORM, LOW);
+#endif  // PIN_OUT_ISR_WAVEFORM
 }
 
 void setup_display() {
@@ -409,6 +426,9 @@ void setup() {
   setup_display();
   setup_encoder();
   pinMode(PIN_IN_BUTTON_PULLUP, INPUT);
+#if defined(PIN_OUT_ISR_WAVEFORM)
+  pinMode(PIN_OUT_ISR_WAVEFORM, OUTPUT);
+#endif  // PIN_OUT_ISR_WAVEFORM
 }
 
 void loop() {
