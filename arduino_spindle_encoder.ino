@@ -1,16 +1,15 @@
 /************************* customizable code *************************/
 
+// Encoder rising edge per revolution (for each A/B signal)
+#define ENCODER_PULSES_PER_REVOLUTION 1024
+
 // Using an encoder with a Z pin allows for a "fixed" homing
 // This allows your position to be found again after a power loss
 // #define USE_Z_RESET
 
-// In case you want to debug something, guard it with this macro for easy disabling
-// #define USE_SERIAL
-
 // Button pin
 #define PIN_IN_BUTTON_PULLUP A4
-#define BUTTON_DEBOUNCE_MS 100
-#define BUTTON_LONG_MS 1000
+
 
 // Encoder pins
 #define PIN_IN_QUAD_A 2
@@ -35,8 +34,13 @@
 #define PIN_OUT_DIGIT_3 A2
 #define PIN_OUT_DIGIT_4 A3
 
-// Encoder rising edge per revolution (for each A/B signal)
-#define ENCODER_PULSES_PER_REVOLUTION 1024
+// Timings
+#define BUTTON_DEBOUNCE_MS 100
+#define BUTTON_LONG_MS 1000
+#define RPM_REFRESH_INTERVAL_MS 500
+
+// In case you want to trace something, add your code and guard it with this macro for easy disabling
+// #define USE_SERIAL
 
 /************************* generic code *************************/
 
@@ -190,7 +194,13 @@ const uint16_t decimal_steps[NUM_DECIMAL_STEPS] = {
   /* 1 */ 9 * (uint16_t)ENCODER_RAW_VALUE_RANGE / 10,
 };
 
+// Error management
 volatile ERROR_CODE error_code = ERROR_CODE_NONE;
+
+// Angular rotations
+volatile uint16_t turn_value = 0;
+
+// Angular position
 volatile uint8_t quadrature_state = QUADRATURE_INIT;
 #if defined(USE_Z_RESET)
 volatile uint16_t position_value = POSITION_UNDEFINED;
@@ -198,6 +208,7 @@ volatile bool position_initialized = false;
 #else
 volatile uint16_t position_value = 0;
 #endif  // USE_Z_RESET
+
 
 #if defined(USE_Z_RESET)
 void position_clockwise_reset() {
@@ -220,6 +231,45 @@ uint16_t degrees_decimal_from_raw_value(uint16_t value) {
   return result;
 }
 
+uint32_t counter_from_turn_and_position(uint32_t turns, uint16_t position) {
+  return turns * (uint32_t)ENCODER_RAW_VALUE_RANGE + position;
+}
+
+uint16_t rpm_from_counters(uint32_t current_counter, uint32_t last_counter, uint32_t interval_ms) {
+  if (interval_ms < RPM_REFRESH_INTERVAL_MS) {
+    return 0;
+  }
+  uint32_t counter_diff = current_counter - last_counter;
+  /* handle negative values on full **counter** uint32_t range */
+  if (counter_diff > ((uint32_t)1 << 31)) {
+    counter_diff = -counter_diff;
+  }
+  /* handle negative values on partial range **current_position_value** uint16_t range */
+  uint32_t overflow_threshold = ((uint32_t)1 << 16) * (uint32_t)ENCODER_RAW_VALUE_RANGE;
+  if (counter_diff > (overflow_threshold >> 1)) {
+    counter_diff = overflow_threshold - counter_diff;
+  }
+
+  // Sample data for later reference
+  // last_counter=0          last_counter=0          counter_diff=0
+  // last_counter=1053       last_counter=0          counter_diff=1053
+  // last_counter=1054       last_counter=1053       counter_diff=1
+  // last_counter=316        last_counter=1054       counter_diff=738
+  // last_counter=268435130  last_counter=316        counter_diff=642
+  // last_counter=268434351  last_counter=268435130  counter_diff=779
+  // last_counter=268434251  last_counter=268434351  counter_diff=100
+  // last_counter=268434903  last_counter=268434251  counter_diff=652
+  // last_counter=305        last_counter=268434903  counter_diff=858
+  // last_counter=1003       last_counter=305        counter_diff=698
+
+  /* convert to "per minute", switch from "millis" */
+  uint32_t rpm = counter_diff * 60 * 1000;
+  /* divide by elasped time, and keep only full turns */
+  rpm /= interval_ms * (uint32_t)ENCODER_RAW_VALUE_RANGE;
+  /* downcast for reasonable values */
+  return rpm;
+}
+
 void isr_quadrature_changed() {
   // compute quadrature state
   uint8_t new_quadrature_state = ((digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
@@ -233,14 +283,27 @@ void isr_quadrature_changed() {
     error_code = ERROR_CODE_QUADRATURE;
     return;
   }
-  // update position accordingly
+
+  // prepare new position
+  uint16_t new_position_value = position_value;
   if (position_change < 0) {
-    position_value += ENCODER_RAW_VALUE_RANGE;
+    new_position_value += ENCODER_RAW_VALUE_RANGE;
   }
-  position_value += position_change;
-  if (position_value >= ENCODER_RAW_VALUE_RANGE) {
-    position_value -= ENCODER_RAW_VALUE_RANGE;
+  new_position_value += position_change;
+  if (new_position_value >= ENCODER_RAW_VALUE_RANGE) {
+    new_position_value -= ENCODER_RAW_VALUE_RANGE;
   }
+
+  // update turns
+  if (position_change == QUADRATURE_CLOCKWISE && new_position_value < position_value) {
+    turn_value++;  // position_value overflow
+  } else if (position_change == QUADRATURE_COUNTER_CLOCKWISE && position_value < new_position_value) {
+    turn_value--;  // position_value underflow
+  }
+
+  // update position
+  position_value = new_position_value;
+
 #if defined(USE_Z_RESET)
   // handle specific reset using Z pin
   if (digitalRead(PIN_IN_QUAD_Z) == 1) {
@@ -349,19 +412,17 @@ void setup() {
 }
 
 void loop() {
+  // persistant variables with local scope
   static DISPLAY_MODE display_mode = DISPLAY_MODE_TEST;
-#if defined(USE_Z_RESET)
-  static uint16_t current_position_value = POSITION_UNDEFINED;
-#else
-  static uint16_t current_position_value = 0;
-#endif  // USE_Z_RESET
   static uint16_t position_value_relative_zero = 0;
-
-  // initialize persistant button state
+  static uint32_t rpm_last_counter = 0;
+  static uint32_t rpm_last_ms = 0;
+  static uint16_t rpm_value = 0;
   static DEBOUNCED_BUTTON button_pullup = { PIN_IN_BUTTON_PULLUP, HIGH, HIGH, 0L };
 
-  // use a non volatile variable for later processing
-  current_position_value = position_value;
+  // use non volatile variables for later processing
+  uint16_t current_position_value = position_value;
+  uint16_t current_turn_value = turn_value;
 
   // handle button
   uint32_t current_ms = millis();
@@ -423,11 +484,11 @@ void loop() {
   switch (display_mode) {
     case DISPLAY_MODE_TEST:
       display_glyphs(glyphs_from_value(8888), 0b1111 /* overlay period on each digit */);
-      if (millis() > DISPLAY_MODE_TEST_DURATION_MS) {
+      if (current_ms > DISPLAY_MODE_TEST_DURATION_MS) {
 #if defined(USE_Z_RESET)
         display_mode = DISPLAY_MODE_INIT;
 #else
-        display_mode = DISPLAY_MODE_RAW; /* TODO: default to RPM */
+        display_mode = DISPLAY_MODE_RPM;
 #endif  // USE_Z_RESET
       }
       break;
@@ -435,12 +496,18 @@ void loop() {
     case DISPLAY_MODE_INIT:
       display_glyphs(GLYPHS_INIT);
       if (position_initialized) {
-        display_mode = DISPLAY_MODE_RAW; /* TODO: default to RPM */
+        display_mode = DISPLAY_MODE_RPM;
       }
       break;
 #endif  // USE_Z_RESET
     case DISPLAY_MODE_RPM:
-      display_glyphs(glyphs_from_value(1234)); /* TODO */
+      if (current_ms - rpm_last_ms > RPM_REFRESH_INTERVAL_MS) {
+        uint32_t current_counter = counter_from_turn_and_position(current_turn_value, current_position_value);
+        rpm_value = rpm_from_counters(current_counter, rpm_last_counter, current_ms - rpm_last_ms);
+        rpm_last_counter = current_counter;
+        rpm_last_ms = current_ms;
+      }
+      display_glyphs(glyphs_from_value(rpm_value));
       break;
     case DISPLAY_MODE_DEGREES:
       display_glyphs(glyphs_degrees_decimal_from_value(current_position_value), 0b0010 /* overlay period on second-to-last digit */);
