@@ -16,7 +16,13 @@ Available functionalities :
 
 - optional : raw encoder value display
 
-- optional : interrupt service routine timing via LED BUILTIN pin
+- optional : interrupt service routine timing
+  - if enabled, used LED BUILTIN pin by default, configurable
+  - currently, on an Arduino UNO, ISR duration is 20 usec (50000x per second)
+
+# Breadboard prototype
+
+[]!(breadboard.svg)
 
 # Limitations
 
@@ -39,7 +45,8 @@ Available functionalities :
 - 1x Arduino UNO
   - or any other 5V MCU with enough pins (see requirements below)
 - Display
-  - 1x [5641AS **Common-Cathode** 4-digit 7-segment display]()
+  - 1x 5641AS **Common-Cathode** 4-digit 7-segment display
+    - https://www.xlitx.com/datasheet/5641AS.pdf
   - 4x 330 ohm resistors for 7-segment display
 - User interface
   - 1x momentary normally open push button
