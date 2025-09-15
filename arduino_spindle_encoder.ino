@@ -189,23 +189,22 @@ volatile ERROR_CODE error_code = ERROR_CODE_NONE;
 volatile uint8_t quadrature_state;
 #if defined(USE_Z_RESET)
 volatile uint16_t position_value = POSITION_UNDEFINED;
-volatile uint16_t last_position_value = POSITION_UNDEFINED;
+volatile bool position_initialized = false;
 #else
 volatile uint16_t position_value = 0;
-volatile uint16_t last_position_value = 0;
 #endif  // USE_Z_RESET
 
 #if defined(USE_Z_RESET)
 void position_clockwise_reset() {
   position_value = 0;
-  last_position_value = ENCODER_RAW_VALUE_RANGE - 1;
+  position_initialized = true;
 }
 #endif  // USE_Z_RESET
 
 #if defined(USE_Z_RESET)
 void position_counter_clockwise_reset() {
   position_value = ENCODER_RAW_VALUE_RANGE - 1;
-  last_position_value = 0;
+  position_initialized = true;
 }
 #endif  // USE_Z_RESET
 
@@ -219,7 +218,7 @@ uint16_t degrees_decimal_from_raw_value(uint16_t value) {
 void isr_quadrature_changed() {
   // lookup quadrature case situation
   quadrature_state = ((quadrature_state << 2) + (digitalRead(PIN_IN_QUAD_B) << 1) + digitalRead(PIN_IN_QUAD_A)) & 0xF;
-  int8_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
+  uint16_t position_change = QUADRATURE_LOOKUPS[quadrature_state];
   // check for errors
   if (position_change == QUADRATURE_INVALID) {
     error_code = ERROR_CODE_QUADRATURE;
@@ -424,7 +423,7 @@ void loop() {
 #if defined(USE_Z_RESET)
     case DISPLAY_MODE_INIT:
       display_glyphs(GLYPHS_INIT);
-      if (last_position_value != POSITION_UNDEFINED) {
+      if (position_initialized) {
         display_mode = DISPLAY_MODE_RAW; /* TODO: default to RPM */
       }
       break;
