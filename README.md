@@ -20,9 +20,19 @@ Available functionalities :
   - if enabled, used LED BUILTIN pin by default, configurable
   - currently, on an Arduino UNO, ISR duration is 20 usec (50000x per second)
 
-# Breadboard prototype
+# Prototypes
 
-![](breadboard.svg)
+## Arduino UNO breadboard
+
+IMPORTANT: uses on-board 16MHz crystal
+
+![](arduino_uno_breadboard.svg)
+
+## Atmega328p perfboard
+
+IMPORTANT: uses on-chip 8 MHz oscillator
+
+![](atmega328p_perfboard.svg)
 
 # Limitations
 
