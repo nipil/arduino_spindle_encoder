@@ -1,6 +1,8 @@
-# Arduino Spindle Encoder
+# Arduino Spindle Encoder : Angle/RPM display
 
 This is the design and files for a lathe spindle encoder.
+
+![](pcb_perfboard_rendering.png)
 
 Available functionalities :
 
@@ -22,17 +24,33 @@ Available functionalities :
 
 # Prototypes
 
-## Arduino UNO breadboard
+## Arduino UNO breadboard prototype
 
-IMPORTANT: uses on-board 16MHz crystal
+Uses on-board 16 MHz crystal
 
 ![](arduino_uno_breadboard.svg)
 
 ## Atmega328p perfboard
 
-IMPORTANT: uses on-chip 8 MHz oscillator
+Uses on-chip internal 8 MHz oscillator
+
+### Schematic
 
 ![](atmega328p_perfboard.svg)
+
+### Perboard layout
+
+EasyEDA preview
+
+![](pcb_perfboard_24x18.png)
+
+Top copper layer and through holes
+
+![](atmega328p_perfboard_top.svg)
+
+Bottom copper layer and through holes :
+
+![](atmega328p_perfboard_bottom.svg)
 
 # Limitations
 
@@ -49,26 +67,22 @@ IMPORTANT: uses on-chip 8 MHz oscillator
 
 # Components
 
+For this project, you will need :
+
 - 1x Omron E6B2-CWZ6C rotary encoder **with open-collector output**
   - https://www.ia.omron.com/product/item/2453/
   - https://www.ia.omron.com/data_pdf/cat/e6b2-c_ds_e_6_3_csm491.pdf
 - 1x Arduino UNO
   - or any other 5V MCU with enough pins (see requirements below)
-- Display
-  - 1x 5641AS **Common-Cathode** 4-digit 7-segment display
-    - https://www.xlitx.com/datasheet/5641AS.pdf
-  - 4x 330 ohm resistors for 7-segment display
-- User interface
-  - 1x momentary normally open push button
-  - 1x 10k ohm resistor for push button pullup
-- Data input
-  - 2x to 3x **3.3k** ohm pullup resistors for the rotary encoder
-  - I chose a **strong pullup** because encoder might be in a noisy environment
-- Connections
-  - 6x to 10x scren terminals
-    - 2x for button
-    - 2x power supply / power switch
-    - 4x to 6x for rotary encoder (VCC/GND/A/B + shield + Z)
+- 1x 5641AS **Common-Cathode** 4-digit 7-segment display
+  - https://www.xlitx.com/datasheet/5641AS.pdf
+
+And see [Bill of materials](BOM.csv) for others components :
+
+- resistors
+- capacitors
+- headers
+- terminals
 
 # Requirements
 
