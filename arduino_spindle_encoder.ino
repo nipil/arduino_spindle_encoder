@@ -758,7 +758,7 @@ public:
       // convert counter difference to "per minute" and switch to "millis"
       // divide by elasped time, keep only full turns, clip to display, and store
       uint32_t result = 60000 * counter_diff;
-      result /= interval_millis * encoder.raw_value_range;
+      result /= interval_millis * encoder.pulse_per_revolution;
       if (result > 9999) {
         result = 9999;
       }
