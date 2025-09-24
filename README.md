@@ -24,6 +24,28 @@ Available functionalities :
 
 # Prototypes
 
+## Pinout
+
+| Pin type |    Pin use   | Arduino UNO | Atmega / DIP28 |
+|:--------:|:------------:|:-----------:|:--------------:|
+|  Output  |   LED A SRC  |      D9     |  PB1 / pin 15  |
+|  Output  |   LED B SRC  |     D13     |  PB5 / pin 19  |
+|  Output  |   LED C SRC  |      D5     |  PD5 / pin 11  |
+|  Output  |   LED D SRC  |      D7     |  PD7 / pin 13  |
+|  Output  |   LED E SRC  |      D8     |  PB0 / pin 14  |
+|  Output  |   LED F SRC  |     D10     |  PB2 / pin 16  |
+|  Output  |   LED G SRC  |      A0     |  PC0 / pin 23  |
+|  Output  |  LED DP SRC  |      D6     |  PD6 / pin 12  |
+|  Output  |  LED D1 SINK |      A2     |  PC2 / pin 25  |
+|  Output  |  LED D2 SINK |      A3     |  PC3 / pin 26  |
+|  Output  |  LED D3 SINK |      A4     |  PC4 / pin 27  |
+|  Output  |  LED D4 SINK |      A5     |  PC5 / pin 28  |
+|  Output  | DEBUG/TIMING |     D11     |  PB3 / pin 17  |
+|   Input  |   ENCODER A  |      D2     |   PD2 / pin 4  |
+|   Input  |   ENCODER B  |      D3     |   PD3 / pin 5  |
+|   Input  |   ENCODER Z  |      D4     |   PD4 / pin 6  |
+|   Input  |    BUTTON    |     D12     |  PB4 / pin 18  |
+
 ## Arduino UNO breadboard prototype
 
 Uses on-board 16 MHz crystal
