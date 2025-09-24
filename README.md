@@ -30,15 +30,15 @@ Uses on-board 16 MHz crystal
 
 ![](arduino_uno_breadboard.svg)
 
-## Atmega328p perfboard
+## Atmega8A (or Atmega328p, or similar...) perfboard
 
-Uses on-chip internal 8 MHz oscillator
+IMPORTANT : Uses on-chip internal 8 MHz oscillator, no on-board crystal.
 
 ### Schematic
 
 ![](atmega328p_perfboard.svg)
 
-### Perboard layout
+### Perboard-compatible PCB layout
 
 EasyEDA preview
 
@@ -51,6 +51,100 @@ Top copper layer and through holes
 Bottom copper layer and through holes :
 
 ![](atmega328p_perfboard_bottom.svg)
+
+If you chose to order PCBs from any manufacturer, just keep the display as **last** thing to solder
+
+### Perfboard soldering
+
+General hints
+
+- Start by placing the microcontroller socket, with "pin 1 marker" on column `C` and row `8`
+- Only solder the microcontroller **non-connected pins** : `9`, `10`, `21`, and `24`
+- Then build/prepare all the other links, *except those who connect to the display* :
+  - Most of the links are done using the legs of the through-hole components
+  - Other links are done reusing old (saved) through-hole component legs
+  - In these case, the legs were shaped to fit and pre-tacked on one side
+  - A couple were made using solid core AWG 34 (0.2 mm2) wire-wrapping + solder
+  - But it could have been done like all the remaining AWG 20 (0.5mm2) solid core
+  - The most difficult solder joints are the last ones for the display over the socket
+  - Where traces overlapped, i either used insulated wire or small heat-shrink over pre-pinned wire
+
+Here is the soldering order i followed, from `(1)` to `(74)` :
+
+![](pcb_perfboard_solder_order.jpg)
+
+Special advice for soldering the display :
+
+- Print the **horizontal-flip** of the PCB (plated holes side), to use as a soldering work sheet
+- The perfboard i use is single sided, without plated holes, so no continuity anywhere
+- The display is placed *above* the previous soldered joints, so no access afterwards
+- For most, i prepared short straight "old-led-legs wires", soldered from socket pins **outwards**
+- For a few, i pre-looped and soldered solid-core 20 AWG jumper **to the top** of the display legs
+- Finally, i loop/soldered a jumper from pin 23 (mark 51) and looped/soldered it to mark 59
+- I placed the display and check that prepared "legs" were bent enough to actually touch display pins
+- I checked all display pins again 3 times, because once started, there was no coming back !
+- I placed "in the air" and level, with pins barely going past the top side (for later testing)
+- I finally soldered marks 64-70, in a "hail mary" style, then finished the floating jumper cables
+
+Verification :
+
+- Print another PCB imagecopy, but this time on the **top side** to verify connections
+- Test **all** connections for continuity : all should be less than 1 ohm
+- Once the capacitor is soldered between `VCC` and `GND`, you have increasing Mohm resistance between them
+
+Soldering duration
+
+- it took me 4-6 hours to plan and do it all because i like to take my time
+- start some peaceful music and enjoy the process, so you can work steadily
+- after a point, there is no second chance, better do it right the first time
+- prepare every joint and leg the best it could be, that is good practice
+- any training on "unimportant" stuff, ensures a safer ride when "it gets difficult" later.
+
+Here are some picture of the final result :
+
+![](pcb_perfboard_solder_photo_bottom.jpg)
+
+![](pcb_perfboard_solder_photo_top.jpg)
+
+![](pcb_perfboard_solder_photo_under_down.jpg)
+
+![](pcb_perfboard_solder_photo_under_up.jpg)
+
+And i you do not feel like doing it, are not in a rush, or want to get pretty things, order a PCB !
+
+## How to connect the board
+
+If you chose to **order PCBs** from any manufacturer
+
+- the labels will be printed on the silkscreen
+
+If you **soldered a perfboard** yourself (one with letters on the long side):
+
+- screwn terminals
+  - `letter W` : power supply = **5V DC**
+  - `letter U` : power supply = GND
+  - `letter S` : button : single pole single throw (SPST) normally-open (NO)
+  - `letter Q` : button : same as above, other leg
+  - `letter O` : quadrature encoder : ground (forwarded *on-board* from `U`)
+  - `letter M` : quadrature encoder : power (**5V DC** forwarded *on-board* from `W`)
+  - `letter K` : quadrature encoder : output Z (once per turn)
+  - `letter I` : quadrature encoder : output B (N per turn, phased from A)
+  - `letter G` : quadrature encoder : output A (N per turn)
+  - `letter E` : quadrature encoder : cable shield
+
+- `J2` connector : male pin headers for encoder shield grounding
+  - `letter C/B` : optional **jumper** `J2`
+
+- `J1` connector : male pin headers for UART ICP (conn)
+  - `row 08` : microcontroller `RESET` pin (see [Requirements](#requirements) for notes about capacitor)
+  - `row 07` : microcontroller `RX` pin
+  - `row 06` : microcontroller `TX` pin
+  - `row 05` : microcontroller **5V DC** `VCC`
+  - `row 04` : microcontroller `GND`
+
+- `H1` connector : female pin headers for timing/debugging
+  - pin on column `U` : signal
+  - pin on other column : ground
 
 # Limitations
 
@@ -69,11 +163,12 @@ Bottom copper layer and through holes :
 
 For this project, you will need :
 
-- 1x Omron E6B2-CWZ6C rotary encoder **with open-collector output**
+- 1x **5V DC** Omron E6B2-CWZ6C rotary encoder **with open-collector output**
   - https://www.ia.omron.com/product/item/2453/
   - https://www.ia.omron.com/data_pdf/cat/e6b2-c_ds_e_6_3_csm491.pdf
-- 1x Arduino UNO
-  - or any other 5V MCU with enough pins (see requirements below)
+- MCU
+  - **for prototyping** 1x Arduino UNO or any other 5V MCU with enough pins (see requirements below)
+  - **for pcb/perfboard** 1x Atmega8A-like MCU and a 28-DIP socket to solder
 - 1x 5641AS **Common-Cathode** 4-digit 7-segment display
   - https://www.xlitx.com/datasheet/5641AS.pdf
 
@@ -101,3 +196,16 @@ And see [Bill of materials](BOM.csv) for others components :
   - Does not need internal pullups
   - Sketch uses 2700 bytes (8% of the UNO's program space)
   - Global variables use 85 bytes (4% of UNO's memory space)
+
+- UART serial programming via ICP headers :
+  - a UART-able bootloader present on chip
+  - a 5V USB-to-serial to upload new sketches
+  - an ceramic (non polarized) 0.1uF capacitor
+    - placed **in between / in series** from DTR/RTS to RESET
+    - is **not** included in the schematic and must be added outside if desired
+    - this capacitor is **not** required if you can time your reset (i can't, lol)
+    - what this capacitor actually does ?
+      - transforms the falling *edge* of DTR/RTS to ground,
+      - into to a *pulse* to ground viewed from RESET,
+      - allowing RESET to raise again to VCC via the pullup on RESET
+      - effectively rebooting the MCU when DTR/RTS changes state
