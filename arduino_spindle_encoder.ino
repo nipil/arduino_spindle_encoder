@@ -1,8 +1,3 @@
-/************************* ROADMAP *************************/
-
-// TODO: read/write from PORTx instead of digitalRead/Write (10us vs 0.25us) --> https://forum.arduino.cc/t/arduino-due-digitalwrite-vs-direct-port-manipulation-speed/666404
-// TODO:  xxx __attribute__((always_inline)) --> https://circuitjournal.com/arduino-force-
-
 /************************* optional stuff *************************/
 
 // Using an encoder with a Z pin allows for a "fixed" homing
@@ -10,32 +5,32 @@
 #define USE_Z_RESET
 
 // Use a digital pin to allow scoping interrupt duration
-// #define USE_ISR_WAVEFORM
+#define USE_ISR_WAVEFORM
 
 // Serial compile-time flag (use macros below)
 // #define USE_SERIAL_PRINT
 
 // Allow raw counter display
-// #define USE_RAW_DISPLAY
+#define USE_RAW_DISPLAY
 
 /************************** Configuration ******************************/
 
-// Display configuration
-#define CONFIG_PIN_OUT_SEGMENT_A 5
-#define CONFIG_PIN_OUT_SEGMENT_B 6
-#define CONFIG_PIN_OUT_SEGMENT_C 7
-#define CONFIG_PIN_OUT_SEGMENT_D 8
-#define CONFIG_PIN_OUT_SEGMENT_E 9
+// Display configuration (Arduino PINS)
+#define CONFIG_PIN_OUT_SEGMENT_A 9
+#define CONFIG_PIN_OUT_SEGMENT_B 13
+#define CONFIG_PIN_OUT_SEGMENT_C 5
+#define CONFIG_PIN_OUT_SEGMENT_D 7
+#define CONFIG_PIN_OUT_SEGMENT_E 8
 #define CONFIG_PIN_OUT_SEGMENT_F 10
-#define CONFIG_PIN_OUT_SEGMENT_G 11
-#define CONFIG_PIN_OUT_SEGMENT_DP 12
-#define CONFIG_PIN_OUT_DIGIT_1 A0
-#define CONFIG_PIN_OUT_DIGIT_2 A1
-#define CONFIG_PIN_OUT_DIGIT_3 A2
-#define CONFIG_PIN_OUT_DIGIT_4 A3
+#define CONFIG_PIN_OUT_SEGMENT_G A0
+#define CONFIG_PIN_OUT_SEGMENT_DP 6
+#define CONFIG_PIN_OUT_DIGIT_1 A2
+#define CONFIG_PIN_OUT_DIGIT_2 A3
+#define CONFIG_PIN_OUT_DIGIT_3 A4
+#define CONFIG_PIN_OUT_DIGIT_4 A5
 #define CONFIG_SEGMENT_ON_TIME_MICROS 10
 
-// Encoder configuration
+// Encoder configuration (Arduino PINS)
 #define CONFIG_ENCODER_PULSES_PER_REVOLUTION 1024  // number of rising edges per revolution !! PER signal !!
 #define CONFIG_PIN_IN_QUAD_A 2
 #define CONFIG_PIN_IN_QUAD_B 3
@@ -44,17 +39,17 @@
 #define CONFIG_PIN_IN_QUAD_Z_ACTIVE_STATE HIGH
 #endif  // USE_Z_RESET
 
-// UI configuration
-#define CONFIG_PIN_IN_BUTTON A4
+// UI configuration (Arduino PINS)
+#define CONFIG_PIN_IN_BUTTON 12
 #define CONFIG_PIN_IN_BUTTON_ACTIVE_STATE LOW
 #define CONFIG_BUTTON_DEBOUNCE_MILLIS 100
 #define CONFIG_BUTTON_LONG_PRESS_MILLIS 1000
 #define CONFIG_UI_INTERVAL_MILLIS 500
 #define CONFIG_DISPLAY_MODE_TEST_DURATION_MILLIS 1000
 
-// Use led pin to scope for interrupt duration
+// Use led pin to scope for interrupt duration (Arduino PINS)
 #if defined(USE_ISR_WAVEFORM)
-#define CONFIG_PIN_OUT_ISR_WAVEFORM LED_BUILTIN
+#define CONFIG_PIN_OUT_ISR_WAVEFORM 11
 #endif  // USE_ISR_WAVEFORM
 
 /************************* Serial macros *************************/
