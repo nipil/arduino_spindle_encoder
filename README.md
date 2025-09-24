@@ -142,6 +142,8 @@ If you chose to **order PCBs** from any manufacturer
 
 If you **soldered a perfboard** yourself (one with letters on the long side):
 
+- print, cut and laminate the [connection card](perfboard-connection-card.odt) (LibreOffice document)
+
 - screwn terminals
   - `letter W` : power supply = **5V DC**
   - `letter U` : power supply = GND
