@@ -1,6 +1,7 @@
 /************************* optional stuff *************************/
 
-// Use digitalWriteFast library (requires installing the library, see README.md)
+// Use digitalWriteFast library, which requires installing the library, see README.md
+// Note: this bypasses the "object oriented design" (as it requires compile time constants)
 // #define USE_FAST_LIBRARY
 
 // Using an encoder with a Z pin allows for a "fixed" homing
@@ -60,14 +61,8 @@
 
 // Define different macros for configurable digital pin manipulations
 #if defined(USE_FAST_LIBRARY)
+#define THROW_ERROR_IF_NOT_FAST  // MUST be declared before the include
 #include <digitalWriteFast.h>
-// prevent unexpected timing suprises
-#define THROW_ERROR_IF_NOT_FAST
-#define DIGITAL_WRITE_MAYBE_FAST digitalWriteFast
-#define DIGITAL_READ_MAYBE_FAST digitalReadFast
-#else  // not USE_FAST_LIBRARY
-#define DIGITAL_WRITE_MAYBE_FAST digitalWrite
-#define DIGITAL_READ_MAYBE_FAST digitalRead
 #endif  // USE_FAST_LIBRARY
 
 /************************* Serial macros *************************/
@@ -241,6 +236,8 @@ public:
     }
   }
 
+#if defined(USE_FAST_LIBRARY)
+#else
   void render_glyph(const Glyph& glyph) const {
     uint8_t glyph_bits = glyph.bits;
     for (uint8_t i = 0; i < SEGMENT_MAX; i++) {
@@ -249,6 +246,7 @@ public:
       glyph_bits >>= 1;
     }
   }
+#endif  // USE_FAST_LIBRARY
 
 private:
   uint8_t get_segment_pin(const SegmentPinIndex index) const {
@@ -258,14 +256,17 @@ private:
     return pin_segments[index];
   }
 
+#if defined(USE_FAST_LIBRARY)
+#else
   void render_segment(const SegmentPinIndex segment_index, const bool segment_is_on) const {
     const uint8_t segment_pin = get_segment_pin(segment_index);
     // to turn on, segment is the inverse of the digit --> !display_type
     // turn on only if state is true = invert (xor) the "on value", if state is false
-    DIGITAL_WRITE_MAYBE_FAST(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
+    digitalWrite(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
     delayMicroseconds(time_on_micros);
-    DIGITAL_WRITE_MAYBE_FAST(segment_pin, display_type);  // disable segment pin (always)
+    digitalWrite(segment_pin, display_type);  // disable segment pin (always)
   }
+#endif  // USE_FAST_LIBRARY
 
 public:
   const DisplayType display_type;
@@ -273,27 +274,6 @@ public:
 private:
   const uint16_t time_on_micros;
   const uint8_t pin_segments[SEGMENT_MAX];
-};
-
-class SegmentDisplay {
-public:
-  SegmentDisplay(const SevenSegmentPins& segment_pins, const uint8_t pin_digit)
-    : segment_pins(segment_pins), pin_digit(pin_digit) {}
-
-  void setup() const {
-    pinMode(pin_digit, OUTPUT);
-    digitalWrite(pin_digit, !segment_pins.display_type);
-  }
-
-  void render_glyph(const Glyph& glyph) const {
-    DIGITAL_WRITE_MAYBE_FAST(pin_digit, segment_pins.display_type);  // enable digit pin
-    segment_pins.render_glyph(glyph);
-    DIGITAL_WRITE_MAYBE_FAST(pin_digit, !segment_pins.display_type);  // disable digit pin
-  }
-
-private:
-  const SevenSegmentPins& segment_pins;
-  const uint8_t pin_digit;
 };
 
 typedef enum {
@@ -387,28 +367,41 @@ public:
     const uint8_t pin_digit2,
     const uint8_t pin_digit3,
     const uint8_t pin_digit4)
-    : segment_displays{
-        SegmentDisplay(segment_pins, pin_digit1),
-        SegmentDisplay(segment_pins, pin_digit2),
-        SegmentDisplay(segment_pins, pin_digit3),
-        SegmentDisplay(segment_pins, pin_digit4),
+    : segment_pins(segment_pins),
+      pin_digits{
+        pin_digit1,
+        pin_digit2,
+        pin_digit3,
+        pin_digit4
       } {}
 
   void setup() const {
     for (uint8_t i = 0; i < DISPLAY_MAX; i++) {
-      segment_displays[(DisplayIndex)i].setup();
+      pinMode(pin_digits[i], OUTPUT);
+      digitalWrite(pin_digits[i], !segment_pins.display_type);
     }
   }
 
   void render_glyphs(const Glyphs& glyphs) const {
+#if defined(USE_FAST_LIBRARY)
+
+
+
+
+
+#else
     for (uint8_t i = 0; i < DISPLAY_MAX; i++) {
       const Glyph& glyph = glyphs.get_glyph_ref((DisplayIndex)i);
-      segment_displays[i].render_glyph(glyph);
+      digitalWrite(pin_digits[i], segment_pins.display_type);  // enable digit pin
+      segment_pins.render_glyph(glyph);
+      digitalWrite(pin_digits[i], !segment_pins.display_type);  // disable digit pin
     }
+#endif  // USE_FAST_LIBRARY
   }
 
 private:
-  const SegmentDisplay segment_displays[DISPLAY_MAX];
+  const SevenSegmentPins& segment_pins;
+  const uint8_t pin_digits[DISPLAY_MAX];
 };
 
 typedef void (*IsrFunc)(void);
@@ -448,16 +441,28 @@ public:
   }
 
   uint8_t get_pin_a() const {
-    return DIGITAL_READ_MAYBE_FAST(pin_a);
+#if defined(USE_FAST_LIBRARY)
+    return digitalReadFast(CONFIG_PIN_IN_QUAD_A);
+#else
+    return digitalRead(pin_a);
+#endif  // USE_FAST_LIBRARY
   }
 
   uint8_t get_pin_b() const {
-    return DIGITAL_READ_MAYBE_FAST(pin_b);
+#if defined(USE_FAST_LIBRARY)
+    return digitalReadFast(CONFIG_PIN_IN_QUAD_B);
+#else
+    return digitalRead(pin_b);
+#endif  // USE_FAST_LIBRARY
   }
 
 #if defined(USE_Z_RESET)
   bool reset_detected() const {
-    return DIGITAL_READ_MAYBE_FAST(pin_z) == pin_z_active_state;
+#if defined(USE_FAST_LIBRARY)
+    return digitalReadFast(CONFIG_PIN_IN_QUAD_Z) == pin_z_active_state;
+#else
+    return digitalRead(pin_z) == pin_z_active_state;
+#endif  // USE_FAST_LIBRARY
   }
 #endif  // USE_Z_RESET
 
@@ -620,15 +625,23 @@ public:
   }
 
   void start() const {
+#if defined(USE_FAST_LIBRARY)
+    digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, HIGH);
+#else
     digitalWrite(pin_waveform, HIGH);
+#endif  // USE_FAST_LIBRARY
   }
 
   void stop() const {
+#if defined(USE_FAST_LIBRARY)
+    digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
+#else
     digitalWrite(pin_waveform, LOW);
+#endif  // USE_FAST_LIBRARY
   }
 
 private:
-  uint8_t pin_waveform;
+  const uint8_t pin_waveform;
 };
 #endif  // USE_ISR_WAVEFORM
 
@@ -656,7 +669,11 @@ public:
 
   bool update() {
     // read and debounce
+#if defined(USE_FAST_LIBRARY)
+    uint8_t current_state = digitalReadFast(CONFIG_PIN_IN_BUTTON);
+#else
     uint8_t current_state = digitalRead(pin_button);
+#endif  // USE_FAST_LIBRARY
     uint32_t current_millis = millis();
     if (current_state != stored_state) {
       stored_state = current_state;
