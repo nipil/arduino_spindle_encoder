@@ -236,17 +236,36 @@ public:
     }
   }
 
-#if defined(USE_FAST_LIBRARY)
-#else
   void render_glyph(const Glyph& glyph) const {
     uint8_t glyph_bits = glyph.bits;
+    bool segment_is_on;
+#if defined(USE_FAST_LIBRARY)
+#define LOCAL_MACRO_RENDER_SEGMENT_FAST(pin_number) \
+  do { \
+    segment_is_on = glyph_bits & 1; \
+    digitalWriteFast(pin_number, !display_type ^ !segment_is_on); /* enable segment pin (if needed) */ \
+    delayMicroseconds(time_on_micros); \
+    digitalWriteFast(pin_number, display_type); /* disable segment pin (always) */ \
+    glyph_bits >>= 1; \
+  } while (0)
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_A);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_B);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_C);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_D);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_E);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_F);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_G);
+    LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_DP);
+#undef LOCAL_MACRO_RENDER_SEGMENT_FAST /* macro should not used elsewhere */
+#else
     for (uint8_t i = 0; i < SEGMENT_MAX; i++) {
-      const bool segment_is_on = glyph_bits & 1;
-      render_segment((SegmentPinIndex)i, segment_is_on);
+      const uint8_t segment_pin = get_segment_pin((SegmentPinIndex)i);
+      segment_is_on = glyph_bits & 1;
+      render_segment(segment_pin, segment_is_on);
       glyph_bits >>= 1;
     }
-  }
 #endif  // USE_FAST_LIBRARY
+  }
 
 private:
   uint8_t get_segment_pin(const SegmentPinIndex index) const {
@@ -258,8 +277,7 @@ private:
 
 #if defined(USE_FAST_LIBRARY)
 #else
-  void render_segment(const SegmentPinIndex segment_index, const bool segment_is_on) const {
-    const uint8_t segment_pin = get_segment_pin(segment_index);
+  void render_segment(const uint8_t segment_pin, const bool segment_is_on) const {
     // to turn on, segment is the inverse of the digit --> !display_type
     // turn on only if state is true = invert (xor) the "on value", if state is false
     digitalWrite(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
@@ -292,7 +310,6 @@ public:
 
   Glyphs(const Glyph& glyph1, const Glyph& glyph2, const Glyph& glyph3, const Glyph& glyph4)
     : glyphs{ glyph1, glyph2, glyph3, glyph4 } {}
-
 
   Glyph& get_glyph(const DisplayIndex index) {
     if (index >= DISPLAY_MAX) {
@@ -384,11 +401,17 @@ public:
 
   void render_glyphs(const Glyphs& glyphs) const {
 #if defined(USE_FAST_LIBRARY)
-
-
-
-
-
+#define LOCAL_MACRO_RENDER_DIGIT_FAST(pin_number, display_number) \
+  do { \
+    digitalWriteFast(pin_number, segment_pins.display_type); /* enable digit pin */ \
+    segment_pins.render_glyph(glyphs.get_glyph_ref(display_number)); \
+    digitalWriteFast(pin_number, !segment_pins.display_type); /* disable digit pin */ \
+  } while (0)
+    LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_1, DISPLAY_1);
+    LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_2, DISPLAY_2);
+    LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_3, DISPLAY_3);
+    LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_4, DISPLAY_4);
+#undef LOCAL_MACRO_RENDER_DIGIT_FAST /* macro should not used elsewhere */
 #else
     for (uint8_t i = 0; i < DISPLAY_MAX; i++) {
       const Glyph& glyph = glyphs.get_glyph_ref((DisplayIndex)i);
