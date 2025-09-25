@@ -1,17 +1,20 @@
 /************************* optional stuff *************************/
 
+// Use digitalWriteFast library (requires installing the library, see README.md)
+// #define USE_FAST_LIBRARY
+
 // Using an encoder with a Z pin allows for a "fixed" homing
 // This allows your position to be found again after a power loss
-#define USE_Z_RESET
+// #define USE_Z_RESET
 
 // Use a digital pin to allow scoping interrupt duration
-#define USE_ISR_WAVEFORM
+// #define USE_ISR_WAVEFORM
 
 // Serial compile-time flag (use macros below)
 // #define USE_SERIAL_PRINT
 
 // Allow raw counter display
-#define USE_RAW_DISPLAY
+// #define USE_RAW_DISPLAY
 
 /************************** Configuration ******************************/
 
@@ -54,6 +57,18 @@
 #if defined(USE_ISR_WAVEFORM)
 #define CONFIG_PIN_OUT_ISR_WAVEFORM 11
 #endif  // USE_ISR_WAVEFORM
+
+// Define different macros for configurable digital pin manipulations
+#if defined(USE_FAST_LIBRARY)
+#include <digitalWriteFast.h>
+// prevent unexpected timing suprises
+#define THROW_ERROR_IF_NOT_FAST
+#define DIGITAL_WRITE_MAYBE_FAST digitalWriteFast
+#define DIGITAL_READ_MAYBE_FAST digitalReadFast
+#else  // not USE_FAST_LIBRARY
+#define DIGITAL_WRITE_MAYBE_FAST digitalWrite
+#define DIGITAL_READ_MAYBE_FAST digitalRead
+#endif  // USE_FAST_LIBRARY
 
 /************************* Serial macros *************************/
 
@@ -247,9 +262,9 @@ private:
     const uint8_t segment_pin = get_segment_pin(segment_index);
     // to turn on, segment is the inverse of the digit --> !display_type
     // turn on only if state is true = invert (xor) the "on value", if state is false
-    digitalWrite(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
+    DIGITAL_WRITE_MAYBE_FAST(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
     delayMicroseconds(time_on_micros);
-    digitalWrite(segment_pin, display_type);  // disable segment pin (always)
+    DIGITAL_WRITE_MAYBE_FAST(segment_pin, display_type);  // disable segment pin (always)
   }
 
 public:
@@ -271,9 +286,9 @@ public:
   }
 
   void render_glyph(const Glyph& glyph) const {
-    digitalWrite(pin_digit, segment_pins.display_type);  // enable digit pin
+    DIGITAL_WRITE_MAYBE_FAST(pin_digit, segment_pins.display_type);  // enable digit pin
     segment_pins.render_glyph(glyph);
-    digitalWrite(pin_digit, !segment_pins.display_type);  // disable digit pin
+    DIGITAL_WRITE_MAYBE_FAST(pin_digit, !segment_pins.display_type);  // disable digit pin
   }
 
 private:
@@ -433,16 +448,16 @@ public:
   }
 
   uint8_t get_pin_a() const {
-    return digitalRead(pin_a);
+    return DIGITAL_READ_MAYBE_FAST(pin_a);
   }
 
   uint8_t get_pin_b() const {
-    return digitalRead(pin_b);
+    return DIGITAL_READ_MAYBE_FAST(pin_b);
   }
 
 #if defined(USE_Z_RESET)
   bool reset_detected() const {
-    return digitalRead(pin_z) == pin_z_active_state;
+    return DIGITAL_READ_MAYBE_FAST(pin_z) == pin_z_active_state;
   }
 #endif  // USE_Z_RESET
 

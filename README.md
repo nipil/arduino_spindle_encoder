@@ -236,10 +236,13 @@ And see [Bill of materials](BOM.csv) for others components :
 
 # Installation
 
-- Clone the project
-- Open in arduino IDE
+- Clone the project and open in arduino IDE
+- Optional : install `digitalWriteFast` library
+  - Uncomment the `USE_FAST_LIBRARY` define at the top of the INO file
+
 - Option 1 : Using an UNO-as-ISP and breadboard schematic
   - use Sketch / Upload using programmer
+
 - Option 2 : install Minicore or better bootloader and fuse management, and upload over serial
   - Follow https://github.com/MCUdude/MiniCore?tab=readme-ov-file#how-to-install
   - Prepare/Configure your board
