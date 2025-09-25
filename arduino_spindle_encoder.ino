@@ -15,6 +15,9 @@
 
 /************************** Configuration ******************************/
 
+// For pins, you can use "native Arduino" pin numbers, or PIN_Pxy port defines from arduino.h,
+// The latter allows clearer mapping, when using bare chipsets, like on the perfboards
+
 // Display configuration (Arduino PINS)
 #define CONFIG_PIN_OUT_SEGMENT_A 9
 #define CONFIG_PIN_OUT_SEGMENT_B 13

@@ -233,3 +233,21 @@ And see [Bill of materials](BOM.csv) for others components :
       - into to a *pulse* to ground viewed from RESET,
       - allowing RESET to raise again to VCC via the pullup on RESET
       - effectively rebooting the MCU when DTR/RTS changes state
+
+# Installation
+
+- Clone the project
+- Open in arduino IDE
+- Option 1 : Using an UNO-as-ISP and breadboard schematic
+  - use Sketch / Upload using programmer
+- Option 2 : install Minicore or better bootloader and fuse management, and upload over serial
+  - Follow https://github.com/MCUdude/MiniCore?tab=readme-ov-file#how-to-install
+  - Prepare/Configure your board
+    - Set Tool / Board / Minicore / Atmega8A (for example)
+    - Set Tool / BOD (Brown out detector) to 4.0V
+    - Set Tool / Clock / Internal 16MHz
+    - Set Tool / Bootloader / Yes (UART 0)
+  - Using an UNO-as-ISP and breadboard schematic
+    - use Tool / Burn bootloader (and fuses)
+  - Using an USB-to-serial adapter, a breadboard montage, and an non-polarized RESET cap
+    - use Sketch / Upload
