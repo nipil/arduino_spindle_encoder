@@ -952,6 +952,13 @@ public:
 #if defined(USE_Z_RESET)
       case INIT:
         loop_init();
+        if (button_short_press) {
+#if defined(USE_RAW_DISPLAY)
+          request_mode(RAW);
+#else
+          request_mode(RPM);
+#endif  // USE_RAW_DISPLAY
+        }
         break;
 #endif  // USE_Z_RESET
     }
