@@ -1065,6 +1065,9 @@ Application global_application(
 void setup() {
   SERIAL_BEGIN(9600);
   SERIAL_PRINTLN("Starting...");
+#if defined(USE_ISR_WAVEFORM)
+  global_isr_monitor.setup();
+#endif  // USE_ISR_WAVEFORM
   global_encoder.setup();
   global_quadrature.setup();
   global_segment_pins.setup();
