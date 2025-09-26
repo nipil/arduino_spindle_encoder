@@ -463,7 +463,7 @@ public:
 #endif  // USE_Z_RESET
   }
 
-  uint8_t get_pin_a() const {
+  inline uint8_t get_pin_a() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
     return digitalReadFast(CONFIG_PIN_IN_QUAD_A);
 #else
@@ -471,7 +471,7 @@ public:
 #endif  // USE_FAST_LIBRARY
   }
 
-  uint8_t get_pin_b() const {
+  inline uint8_t get_pin_b() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
     return digitalReadFast(CONFIG_PIN_IN_QUAD_B);
 #else
@@ -480,7 +480,7 @@ public:
   }
 
 #if defined(USE_Z_RESET)
-  bool reset_detected() const {
+  inline bool reset_detected() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
     return digitalReadFast(CONFIG_PIN_IN_QUAD_Z) == pin_z_active_state;
 #else
@@ -525,11 +525,11 @@ public:
 #endif  // USE_Z_RESET
   }
 
-  void update_state_from_inputs() {
+  inline void update_state_from_inputs() __attribute__((always_inline)) {
     state = ((state & 0b0011) << 2) | ((encoder.get_pin_b() & 1) << 1) | (encoder.get_pin_a() & 1);
   }
 
-  void update_counter_from_quadrature() {
+  inline void update_counter_from_quadrature() __attribute__((always_inline)) {
     // branchless counter update (increment, decrement, or keep)
     const uint16_t result = LOOKUP[state];
     const int8_t delta = (int8_t)result & 0xFF;
@@ -647,7 +647,7 @@ public:
     digitalWrite(pin_waveform, LOW);
   }
 
-  void start() const {
+  inline void start() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, HIGH);
 #else
@@ -655,7 +655,7 @@ public:
 #endif  // USE_FAST_LIBRARY
   }
 
-  void stop() const {
+  inline void stop() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
 #else
@@ -764,11 +764,15 @@ IsrMonitor global_isr_monitor(CONFIG_PIN_OUT_ISR_WAVEFORM);
 #endif  // USE_ISR_WAVEFORM
 
 void isr_position() {
+
 #if defined(USE_ISR_WAVEFORM)
   global_isr_monitor.start();
 #endif  // USE_ISR_WAVEFORM
+
+  // this inlined (assembly checked) code handler takes 13.35us (waveform checked on scope)
   global_quadrature.update_state_from_inputs();
   global_quadrature.update_counter_from_quadrature();
+
 #if defined(USE_ISR_WAVEFORM)
   global_isr_monitor.stop();
 #endif  // USE_ISR_WAVEFORM
@@ -778,7 +782,10 @@ void isr_speed() {
 #if defined(USE_ISR_WAVEFORM)
   global_isr_monitor.start();
 #endif  // USE_ISR_WAVEFORM
+
+  // this inlined (assembly checked : 22 AVRe cycles) code handler takes 2.8us (waveform checked on scope)
   global_quadrature.increment_counter();
+
 #if defined(USE_ISR_WAVEFORM)
   global_isr_monitor.stop();
 #endif  // USE_ISR_WAVEFORM
