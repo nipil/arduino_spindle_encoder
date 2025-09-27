@@ -498,7 +498,7 @@ public:
     const int8_t delta = (int8_t)result & 0b00000111;
     counter += delta - 1;
     if (result > CW) {
-      const uint8_t error = (uint8_t)result >> 3;
+      const uint8_t error = (result >> 3) & 0b00001111;
       error_flag |= error;
     }
 #if defined(USE_Z_RESET)
