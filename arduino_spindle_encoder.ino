@@ -414,16 +414,18 @@ public:
   typedef void (*IsrFunc)(void);
 
   Encoder(
-    const uint16_t pulse_per_revolution,
+    const uint16_t pulse_per_revolution
 #if defined(USE_Z_RESET)
+    ,
     const uint8_t pin_z_active_state
 #endif  // USE_Z_RESET
     )
     : pulse_per_revolution(pulse_per_revolution),
       // Encoder count of A/B signal *changes* in a single turn
       // = max raw value before over/under flowing
-      raw_value_range(pulse_per_revolution << 2),
+      raw_value_range(pulse_per_revolution << 2)
 #if defined(USE_Z_RESET)
+      ,
       pin_z_active_state(pin_z_active_state)
 #endif  // USE_Z_RESET
   {
@@ -694,8 +696,9 @@ private:
 /************************* Global variables (required for interrupts) *************************/
 
 Encoder global_encoder(
-  CONFIG_ENCODER_PULSES_PER_REVOLUTION,
+  CONFIG_ENCODER_PULSES_PER_REVOLUTION
 #if defined(USE_Z_RESET)
+  ,
   CONFIG_PIN_IN_QUAD_Z_ACTIVE_STATE
 #endif  // USE_Z_RESET
 );
