@@ -509,10 +509,14 @@ public:
 #endif  // USE_Z_RESET
   }
 
-  void setup() {
+  void initialize_state() {
     // build a valid state from two reads
     update_state_from_inputs();
     update_state_from_inputs();
+  }
+
+  void setup() {
+    initialize_state();
   }
 
   void clear_counter() {
@@ -537,6 +541,7 @@ public:
   }
 
   void clear_error() {
+    initialize_state();
     error_flag = 0;
   }
 
