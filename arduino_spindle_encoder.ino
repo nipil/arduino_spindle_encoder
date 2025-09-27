@@ -1,9 +1,5 @@
 /************************* optional stuff *************************/
 
-// Use digitalWriteFast library, which requires installing the library, see README.md
-// Note: this bypasses the "object oriented design" (as it requires compile time constants)
-// #define USE_FAST_LIBRARY
-
 // Using an encoder with a Z pin allows for a "fixed" homing
 // This allows your position to be found again after a power loss
 // #define USE_Z_RESET
@@ -42,7 +38,7 @@
 
 // Encoder configuration (Arduino PINS)
 #define CONFIG_ENCODER_PULSES_PER_REVOLUTION 1024  // number of rising edges per revolution !! PER signal !!
-#define CONFIG_ENCODER_COUNTER_TYPE uint32_t       // choose uint16_t if your change rate is slow enough and you do not have overflows
+#define CONFIG_ENCODER_COUNTER_TYPE uint32_t       // choose uint16_t if your change rate is slow enough so you do not have overflows...
 #define CONFIG_PIN_IN_QUAD_A 2
 #define CONFIG_PIN_IN_QUAD_B 3
 #if defined(USE_Z_RESET)
@@ -64,10 +60,8 @@
 #endif  // USE_ISR_WAVEFORM
 
 // Define different macros for configurable digital pin manipulations
-#if defined(USE_FAST_LIBRARY)
 #define THROW_ERROR_IF_NOT_FAST  // MUST be declared before the include
 #include <digitalWriteFast.h>
-#endif  // USE_FAST_LIBRARY
 
 /************************* Macros *************************/
 
@@ -256,18 +250,31 @@ public:
         pin_dp
       } {}
 
+
   void setup() const {
-    for (uint8_t i = 0; i < SEGMENT_MAX; i++) {
-      const uint8_t segment_pin = get_segment_pin((SegmentPinIndex)i);
-      pinMode(segment_pin, OUTPUT);
-      digitalWrite(segment_pin, display_type);
-    }
+
+#define LOCAL_MACRO_SETUP_SEGMENT_FAST(pin_number) \
+  do { \
+    pinModeFast(pin_number, OUTPUT); \
+    digitalWriteFast(pin_number, display_type); \
+  } while (0)
+
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_A);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_B);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_C);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_D);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_E);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_F);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_G);
+    LOCAL_MACRO_SETUP_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_DP);
+
+#undef LOCAL_MACRO_SETUP_SEGMENT_FAST /* no further use */
   }
 
   void render_glyph(const Glyph& glyph) const {
     uint8_t glyph_bits = glyph.bits;
     bool segment_is_on;
-#if defined(USE_FAST_LIBRARY)
+
 #define LOCAL_MACRO_RENDER_SEGMENT_FAST(pin_number) \
   do { \
     segment_is_on = glyph_bits & 1; \
@@ -276,6 +283,7 @@ public:
     digitalWriteFast(pin_number, display_type); /* disable segment pin (always) */ \
     glyph_bits >>= 1; \
   } while (0)
+
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_A);
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_B);
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_C);
@@ -284,15 +292,8 @@ public:
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_F);
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_G);
     LOCAL_MACRO_RENDER_SEGMENT_FAST(CONFIG_PIN_OUT_SEGMENT_DP);
-#undef LOCAL_MACRO_RENDER_SEGMENT_FAST /* macro should not used elsewhere */
-#else
-    for (uint8_t i = 0; i < SEGMENT_MAX; i++) {
-      const uint8_t segment_pin = get_segment_pin((SegmentPinIndex)i);
-      segment_is_on = glyph_bits & 1;
-      render_segment(segment_pin, segment_is_on);
-      glyph_bits >>= 1;
-    }
-#endif  // USE_FAST_LIBRARY
+
+#undef LOCAL_MACRO_RENDER_SEGMENT_FAST /* no further use */
   }
 
 private:
@@ -302,17 +303,6 @@ private:
     }
     return pin_segments[index];
   }
-
-#if defined(USE_FAST_LIBRARY)
-#else
-  void render_segment(const uint8_t segment_pin, const bool segment_is_on) const {
-    // to turn on, segment is the inverse of the digit --> !display_type
-    // turn on only if state is true = invert (xor) the "on value", if state is false
-    digitalWrite(segment_pin, !display_type ^ !segment_is_on);  // enable segment pin (if needed)
-    delayMicroseconds(time_on_micros);
-    digitalWrite(segment_pin, display_type);  // disable segment pin (always)
-  }
-#endif  // USE_FAST_LIBRARY
 
 public:
   const DisplayType display_type;
@@ -421,33 +411,36 @@ public:
       } {}
 
   void setup() const {
-    for (uint8_t i = 0; i < DISPLAY_MAX; i++) {
-      pinMode(pin_digits[i], OUTPUT);
-      digitalWrite(pin_digits[i], !segment_pins.display_type);
-    }
+
+#define LOCAL_MACRO_SETUP_DIGIT_FAST(pin_number) \
+  do { \
+    pinModeFast(pin_number, OUTPUT); \
+    digitalWriteFast(pin_number, !segment_pins.display_type); \
+  } while (0)
+
+    LOCAL_MACRO_SETUP_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_1);
+    LOCAL_MACRO_SETUP_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_2);
+    LOCAL_MACRO_SETUP_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_3);
+    LOCAL_MACRO_SETUP_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_4);
+
+#undef LOCAL_MACRO_SETUP_DIGIT_FAST /* no further use */
   }
 
   void render_glyphs(const Glyphs& glyphs) const {
-#if defined(USE_FAST_LIBRARY)
+
 #define LOCAL_MACRO_RENDER_DIGIT_FAST(pin_number, display_number) \
   do { \
     digitalWriteFast(pin_number, segment_pins.display_type); /* enable digit pin */ \
     segment_pins.render_glyph(glyphs.get_glyph_ref(display_number)); \
     digitalWriteFast(pin_number, !segment_pins.display_type); /* disable digit pin */ \
   } while (0)
+
     LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_1, DISPLAY_1);
     LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_2, DISPLAY_2);
     LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_3, DISPLAY_3);
     LOCAL_MACRO_RENDER_DIGIT_FAST(CONFIG_PIN_OUT_DIGIT_4, DISPLAY_4);
-#undef LOCAL_MACRO_RENDER_DIGIT_FAST /* macro should not used elsewhere */
-#else
-    for (uint8_t i = 0; i < DISPLAY_MAX; i++) {
-      const Glyph& glyph = glyphs.get_glyph_ref((DisplayIndex)i);
-      digitalWrite(pin_digits[i], segment_pins.display_type);  // enable digit pin
-      segment_pins.render_glyph(glyph);
-      digitalWrite(pin_digits[i], !segment_pins.display_type);  // disable digit pin
-    }
-#endif  // USE_FAST_LIBRARY
+
+#undef LOCAL_MACRO_RENDER_DIGIT_FAST /* no further use */
   }
 
 private:
@@ -455,10 +448,11 @@ private:
   const uint8_t pin_digits[DISPLAY_MAX];
 };
 
-typedef void (*IsrFunc)(void);
 
 class Encoder {
 public:
+  typedef void (*IsrFunc)(void);
+
   Encoder(
     const uint16_t pulse_per_revolution,
     const uint8_t pin_a,
@@ -484,39 +478,27 @@ public:
   }
 
   void setup() const {
-    pinMode(pin_a, INPUT);
-    pinMode(pin_b, INPUT);
+    pinModeFast(CONFIG_PIN_IN_QUAD_A, INPUT);
+    pinModeFast(CONFIG_PIN_IN_QUAD_B, INPUT);
 #if defined(USE_Z_RESET)
-    pinMode(pin_z, INPUT);
+    pinModeFast(CONFIG_PIN_IN_QUAD_Z, INPUT);
 #endif  // USE_Z_RESET
   }
 
   inline uint8_t get_pin_a() const __attribute__((always_inline)) {
-#if defined(USE_FAST_LIBRARY)
     // 4 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_A);
-#else
-    return digitalRead(pin_a);
-#endif  // USE_FAST_LIBRARY
   }
 
   inline uint8_t get_pin_b() const __attribute__((always_inline)) {
-#if defined(USE_FAST_LIBRARY)
     // 4 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_B);
-#else
-    return digitalRead(pin_b);
-#endif  // USE_FAST_LIBRARY
   }
 
 #if defined(USE_Z_RESET)
   inline bool reset_detected() const __attribute__((always_inline)) {
-#if defined(USE_FAST_LIBRARY)
     // 7 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_Z) == pin_z_active_state;
-#else
-    return digitalRead(pin_z) == pin_z_active_state;
-#endif  // USE_FAST_LIBRARY
   }
 #endif  // USE_Z_RESET
 
@@ -562,8 +544,6 @@ public:
   }
 
   inline void update_counter_from_quadrature() __attribute__((always_inline)) {
-    // 32 bits counter: 55 cycles
-    // 16 bits counter: 42 cycles
     const uint8_t result = LOOKUP[state];
     const int8_t delta = (int8_t)result & 0b00000111;
     counter += delta - 1;
@@ -571,8 +551,6 @@ public:
       const uint8_t error = (uint8_t)result >> 3;
       error_flag |= error;
     }
-    // const uint8_t error = (uint8_t)result >> 3;
-    // error_flag |= error;
 #if defined(USE_Z_RESET)
     if (encoder.reset_detected()) {
       counter = 0;
@@ -682,24 +660,16 @@ public:
     : pin_waveform(pin_waveform) {}
 
   void setup() const {
-    pinMode(pin_waveform, OUTPUT);
-    digitalWrite(pin_waveform, LOW);
+    pinModeFast(CONFIG_PIN_OUT_ISR_WAVEFORM, OUTPUT);
+    digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
   }
 
   inline void start() const __attribute__((always_inline)) {
-#if defined(USE_FAST_LIBRARY)
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, HIGH);
-#else
-    digitalWrite(pin_waveform, HIGH);
-#endif  // USE_FAST_LIBRARY
   }
 
   inline void stop() const __attribute__((always_inline)) {
-#if defined(USE_FAST_LIBRARY)
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
-#else
-    digitalWrite(pin_waveform, LOW);
-#endif  // USE_FAST_LIBRARY
   }
 
 private:
@@ -724,18 +694,14 @@ public:
       long_press_has_been_triggered(false) {}
 
   void setup() {
-    pinMode(pin_button, INPUT);
-    last_value = stored_state = digitalRead(pin_button);
+    pinModeFast(CONFIG_PIN_IN_BUTTON, INPUT);
+    last_value = stored_state = digitalReadFast(CONFIG_PIN_IN_BUTTON);
     last_change_millis = millis();
   }
 
   bool update() {
     // read and debounce
-#if defined(USE_FAST_LIBRARY)
     uint8_t current_state = digitalReadFast(CONFIG_PIN_IN_BUTTON);
-#else
-    uint8_t current_state = digitalRead(pin_button);
-#endif  // USE_FAST_LIBRARY
     uint32_t current_millis = millis();
     if (current_state != stored_state) {
       stored_state = current_state;
@@ -808,7 +774,6 @@ void isr_position() {
   global_isr_monitor.start();
 #endif  // USE_ISR_WAVEFORM
 
-  // this inlined (assembly checked) code handler takes 13.35us (waveform checked on scope)
   global_quadrature.update_state_from_inputs();
   global_quadrature.update_counter_from_quadrature();
 
@@ -822,7 +787,6 @@ void isr_speed() {
   global_isr_monitor.start();
 #endif  // USE_ISR_WAVEFORM
 
-  // this inlined (assembly checked : 22 AVRe cycles) code handler takes 2.8us (waveform checked on scope)
   global_quadrature.increment_counter();
 
 #if defined(USE_ISR_WAVEFORM)
@@ -946,7 +910,6 @@ public:
     }
     display.render_glyphs(Glyphs::TEST);
   }
-
 
   void loop_rpm() {
     rpm_calculator.update();
@@ -1185,7 +1148,7 @@ void time_sensitive_functions() {
   PRINT_CLOCK_CYCLES("ck_quad_in", global_quadrature.update_state_from_inputs());
   PRINT_CLOCK_CYCLES("ck_quad_up", global_quadrature.update_counter_from_quadrature());
 
-  // 32-bit quadrature counter
+  // with a 32-bit quadrature counter
   // ck_enc_ab=1 ovf=1
   // ck_enc_rst=1 ovf=1
   // ck_quad_inc=20 ovf=1
@@ -1193,7 +1156,7 @@ void time_sensitive_functions() {
   // ck_quad_up=53 ovf=1
   // loops=1472 (without any interrupt activity)
 
-  // 16-bit quadrature counter
+  // with a 16-bit quadrature counter
   // ck_enc_ab=1 ovf=1
   // ck_enc_rst=1 ovf=1
   // ck_quad_inc=10 ovf=1
@@ -1201,30 +1164,20 @@ void time_sensitive_functions() {
   // ck_quad_up=40 ovf=1
   // loops=1473 (without any interrupt activity)
 
-  // isr waveform duration with 16-bit counter
-  // isr_speed = 1.74us ~ (quad_inc) * 125ns
-  // isr_position = 7.71us ~ (quad_in + quad_up) * 125ns
+  // isr waveform duration
+  // rpm mode = 1.74us ~ (quad_inc) * 125ns
+  // deg/raw mode = 7.71us ~ (quad_in + quad_up) * 125ns
 }
 #endif  // USE_TIMING
 
 void loop() {
   global_application.loop();
 
+#if defined(USE_TIMING)
   static uint32_t last = 0;
-  static uint32_t loop_count = 0;
-  static uint32_t min_loop_count = 1000000;
   if (millis() - last > 1000) {
     last = millis();
-#if defined(USE_TIMING)
     time_sensitive_functions();
-#endif  // USE_TIMING
-    if (loop_count < min_loop_count) {
-      min_loop_count = loop_count;
-      SERIAL_PRINT("min_loops=");
-      SERIAL_PRINTLN(min_loop_count);
-    }
-    loop_count = 0;
-  } else {
-    loop_count++;
   }
+#endif  // USE_TIMING
 }
