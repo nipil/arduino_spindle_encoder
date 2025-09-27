@@ -228,28 +228,9 @@ public:
 
   SevenSegmentPins(
     const DisplayType display_type,
-    const uint8_t pin_a,
-    const uint8_t pin_b,
-    const uint8_t pin_c,
-    const uint8_t pin_d,
-    const uint8_t pin_e,
-    const uint8_t pin_f,
-    const uint8_t pin_g,
-    const uint8_t pin_dp,
     const uint16_t time_on_micros)
     : display_type(display_type),
-      time_on_micros(time_on_micros),
-      pin_segments{
-        pin_a,
-        pin_b,
-        pin_c,
-        pin_d,
-        pin_e,
-        pin_f,
-        pin_g,
-        pin_dp
-      } {}
-
+      time_on_micros(time_on_micros) {}
 
   void setup() const {
 
@@ -296,20 +277,11 @@ public:
 #undef LOCAL_MACRO_RENDER_SEGMENT_FAST /* no further use */
   }
 
-private:
-  uint8_t get_segment_pin(const SegmentPinIndex index) const {
-    if (index >= SEGMENT_MAX) {
-      return pin_segments[SEGMENT_DP];
-    }
-    return pin_segments[index];
-  }
-
 public:
   const DisplayType display_type;
 
 private:
   const uint16_t time_on_micros;
-  const uint8_t pin_segments[SEGMENT_MAX];
 };
 
 typedef enum {
@@ -396,19 +368,8 @@ const Glyphs Glyphs::EMPTY = Glyphs::build_empty();
 
 class FourDigitDisplay {
 public:
-  FourDigitDisplay(
-    const SevenSegmentPins& segment_pins,
-    const uint8_t pin_digit1,
-    const uint8_t pin_digit2,
-    const uint8_t pin_digit3,
-    const uint8_t pin_digit4)
-    : segment_pins(segment_pins),
-      pin_digits{
-        pin_digit1,
-        pin_digit2,
-        pin_digit3,
-        pin_digit4
-      } {}
+  FourDigitDisplay(const SevenSegmentPins& segment_pins)
+    : segment_pins(segment_pins) {}
 
   void setup() const {
 
@@ -445,7 +406,6 @@ public:
 
 private:
   const SevenSegmentPins& segment_pins;
-  const uint8_t pin_digits[DISPLAY_MAX];
 };
 
 
@@ -455,11 +415,7 @@ public:
 
   Encoder(
     const uint16_t pulse_per_revolution,
-    const uint8_t pin_a,
-    const uint8_t pin_b
 #if defined(USE_Z_RESET)
-    ,
-    const uint8_t pin_z,
     const uint8_t pin_z_active_state
 #endif  // USE_Z_RESET
     )
@@ -467,11 +423,7 @@ public:
       // Encoder count of A/B signal *changes* in a single turn
       // = max raw value before over/under flowing
       raw_value_range(pulse_per_revolution << 2),
-      pin_a(pin_a),
-      pin_b(pin_b)
 #if defined(USE_Z_RESET)
-      ,
-      pin_z(pin_z),
       pin_z_active_state(pin_z_active_state)
 #endif  // USE_Z_RESET
   {
@@ -503,17 +455,17 @@ public:
 #endif  // USE_Z_RESET
 
   void uninstall_all_isr() {
-    detachInterrupt(digitalPinToInterrupt(pin_a));
-    detachInterrupt(digitalPinToInterrupt(pin_b));
+    detachInterrupt(digitalPinToInterrupt(CONFIG_PIN_IN_QUAD_A));
+    detachInterrupt(digitalPinToInterrupt(CONFIG_PIN_IN_QUAD_B));
   }
 
   void install_isr_change_a_b(IsrFunc isr) {
-    attachInterrupt(digitalPinToInterrupt(pin_a), isr, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(pin_b), isr, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(CONFIG_PIN_IN_QUAD_A), isr, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(CONFIG_PIN_IN_QUAD_B), isr, CHANGE);
   }
 
   void install_isr_rising_a(IsrFunc isr) {
-    attachInterrupt(digitalPinToInterrupt(pin_a), isr, RISING);
+    attachInterrupt(digitalPinToInterrupt(CONFIG_PIN_IN_QUAD_A), isr, RISING);
   }
 
 public:
@@ -521,10 +473,7 @@ public:
   const uint16_t raw_value_range;
 
 private:
-  const uint8_t pin_a;
-  const uint8_t pin_b;
 #if defined(USE_Z_RESET)
-  const uint8_t pin_z;
   const uint8_t pin_z_active_state;
 #endif  // USE_Z_RESET
 };
@@ -539,11 +488,12 @@ public:
   }
 
   inline void update_state_from_inputs() __attribute__((always_inline)) {
-    // 26 clock cycles
+    // see time_sensitive_functions() for performance
     state = ((state & 0b0011) << 2) | ((encoder.get_pin_b() & 1) << 1) | (encoder.get_pin_a() & 1);
   }
 
   inline void update_counter_from_quadrature() __attribute__((always_inline)) {
+    // see time_sensitive_functions() for performance
     const uint8_t result = LOOKUP[state];
     const int8_t delta = (int8_t)result & 0b00000111;
     counter += delta - 1;
@@ -570,9 +520,7 @@ public:
   }
 
   inline void increment_counter() __attribute__((always_inline)) {
-    // 32 bits counter: 20 cycles
-    // 16 bits counter: 10 cycles
-    // 8 bits counter: 5 cycles
+    // see time_sensitive_functions() for performance
     counter++;
   }
 
@@ -656,9 +604,6 @@ const uint8_t Quadrature::LOOKUP[LOOKUP_SIZE] = {
 #if defined(USE_ISR_WAVEFORM)
 class IsrMonitor {
 public:
-  IsrMonitor(const uint8_t pin_waveform)
-    : pin_waveform(pin_waveform) {}
-
   void setup() const {
     pinModeFast(CONFIG_PIN_OUT_ISR_WAVEFORM, OUTPUT);
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
@@ -671,21 +616,16 @@ public:
   inline void stop() const __attribute__((always_inline)) {
     digitalWriteFast(CONFIG_PIN_OUT_ISR_WAVEFORM, LOW);
   }
-
-private:
-  const uint8_t pin_waveform;
 };
 #endif  // USE_ISR_WAVEFORM
 
 class DebouncedButton {
 public:
   DebouncedButton(
-    const uint8_t pin_button,
     const uint8_t active_state,
     const uint32_t debounce_millis,
     const uint32_t long_press_millis)
-    : pin_button(pin_button),
-      active_state(active_state),
+    : active_state(active_state),
       debounce_millis(debounce_millis),
       long_press_millis(long_press_millis),
       last_value(0),
@@ -737,7 +677,6 @@ public:
   }
 
 private:
-  const uint8_t pin_button;
   const uint8_t active_state;
   const uint32_t debounce_millis;
   const uint32_t long_press_millis;
@@ -751,11 +690,7 @@ private:
 
 Encoder global_encoder(
   CONFIG_ENCODER_PULSES_PER_REVOLUTION,
-  CONFIG_PIN_IN_QUAD_A,
-  CONFIG_PIN_IN_QUAD_B
 #if defined(USE_Z_RESET)
-  ,
-  CONFIG_PIN_IN_QUAD_Z,
   CONFIG_PIN_IN_QUAD_Z_ACTIVE_STATE
 #endif  // USE_Z_RESET
 );
@@ -765,7 +700,7 @@ Quadrature global_quadrature(global_encoder);
 /************************* Interrup service routines (need global variables) *************************/
 
 #if defined(USE_ISR_WAVEFORM)
-IsrMonitor global_isr_monitor(CONFIG_PIN_OUT_ISR_WAVEFORM);
+IsrMonitor global_isr_monitor;
 #endif  // USE_ISR_WAVEFORM
 
 void isr_position() {
@@ -1094,26 +1029,12 @@ private:
 
 SevenSegmentPins global_segment_pins(
   DisplayType::COMMON_CATHODE,
-  CONFIG_PIN_OUT_SEGMENT_A,
-  CONFIG_PIN_OUT_SEGMENT_B,
-  CONFIG_PIN_OUT_SEGMENT_C,
-  CONFIG_PIN_OUT_SEGMENT_D,
-  CONFIG_PIN_OUT_SEGMENT_E,
-  CONFIG_PIN_OUT_SEGMENT_F,
-  CONFIG_PIN_OUT_SEGMENT_G,
-  CONFIG_PIN_OUT_SEGMENT_DP,
   CONFIG_SEGMENT_ON_TIME_MICROS);
 
 FourDigitDisplay global_display(
-  global_segment_pins,
-  /* FIXME : might be inverted */
-  CONFIG_PIN_OUT_DIGIT_1,
-  CONFIG_PIN_OUT_DIGIT_2,
-  CONFIG_PIN_OUT_DIGIT_3,
-  CONFIG_PIN_OUT_DIGIT_4);
+  global_segment_pins);
 
 DebouncedButton global_button(
-  CONFIG_PIN_IN_BUTTON,
   CONFIG_PIN_IN_BUTTON_ACTIVE_STATE,
   CONFIG_BUTTON_DEBOUNCE_MILLIS,
   CONFIG_BUTTON_LONG_PRESS_MILLIS);
