@@ -573,7 +573,7 @@ private:
   const Encoder& encoder;
   volatile uint8_t state;
   volatile CONFIG_ENCODER_COUNTER_TYPE counter;
-  uint32_t relative_zero;
+  CONFIG_ENCODER_COUNTER_TYPE relative_zero;
   volatile uint8_t error_flag;
 #if defined(USE_Z_RESET)
   volatile bool homing_canary;
