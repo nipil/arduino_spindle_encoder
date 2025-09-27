@@ -17,6 +17,9 @@
 // Allow raw counter display
 // #define USE_RAW_DISPLAY
 
+// Display clock cycles of sensitive functions (requires USE_SERIAL_PRINT !)
+// #define USE_TIMING
+
 /************************** Configuration ******************************/
 
 // For pins, you can use "native Arduino" pin numbers, or PIN_Pxy port defines from arduino.h,
@@ -39,6 +42,7 @@
 
 // Encoder configuration (Arduino PINS)
 #define CONFIG_ENCODER_PULSES_PER_REVOLUTION 1024  // number of rising edges per revolution !! PER signal !!
+#define CONFIG_ENCODER_COUNTER_TYPE uint32_t       // choose uint16_t if your change rate is slow enough and you do not have overflows
 #define CONFIG_PIN_IN_QUAD_A 2
 #define CONFIG_PIN_IN_QUAD_B 3
 #if defined(USE_Z_RESET)
@@ -65,7 +69,7 @@
 #include <digitalWriteFast.h>
 #endif  // USE_FAST_LIBRARY
 
-/************************* Serial macros *************************/
+/************************* Macros *************************/
 
 #if defined(USE_SERIAL_PRINT)
 #define SERIAL_BEGIN(X) \
@@ -85,6 +89,30 @@
 #define SERIAL_PRINT_2(X, Y)
 #define SERIAL_PRINTLN_2(X, Y)
 #endif
+
+// Timer1 can be used to time things while running on target chip, but offline disassembly can too :
+//    open disassembly file in the build folder C:\Users\xxxx\AppData\Local\arduino\sketches\YYYY\*.lst
+//    look the address range you want to analyse
+//    disassemble it again using avrdude,including the clock cycle count :
+//      avrdude -p m8a  -c dryrun -U sketch.elf -T 'disasm -q flash 0x116 0x80'
+//    and sum up the numbers in the second column !
+
+#define PRINT_CLOCK_CYCLES(LABEL, X) \
+  do { \
+    TCCR1A = 0; \
+    TCCR1B = 0; \
+    TCNT1 = 0; \
+    bitClear(TIFR, TOV1); \
+    TCCR1B = 1; \
+    X; \
+    TCCR1B = 0; \
+    bitClear(TIFR, TOV1); \
+    SERIAL_PRINT(LABEL); \
+    SERIAL_PRINT("="); \
+    SERIAL_PRINT(TCNT1 - 1); \
+    SERIAL_PRINT(" ovf="); \
+    SERIAL_PRINTLN(bitRead(TIFR, TOV1)); \
+  } while (0)
 
 /************************** Library ******************************/
 
@@ -465,6 +493,7 @@ public:
 
   inline uint8_t get_pin_a() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
+    // 4 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_A);
 #else
     return digitalRead(pin_a);
@@ -473,6 +502,7 @@ public:
 
   inline uint8_t get_pin_b() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
+    // 4 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_B);
 #else
     return digitalRead(pin_b);
@@ -482,6 +512,7 @@ public:
 #if defined(USE_Z_RESET)
   inline bool reset_detected() const __attribute__((always_inline)) {
 #if defined(USE_FAST_LIBRARY)
+    // 7 clock cycles
     return digitalReadFast(CONFIG_PIN_IN_QUAD_Z) == pin_z_active_state;
 #else
     return digitalRead(pin_z) == pin_z_active_state;
@@ -526,26 +557,27 @@ public:
   }
 
   inline void update_state_from_inputs() __attribute__((always_inline)) {
+    // 26 clock cycles
     state = ((state & 0b0011) << 2) | ((encoder.get_pin_b() & 1) << 1) | (encoder.get_pin_a() & 1);
   }
 
   inline void update_counter_from_quadrature() __attribute__((always_inline)) {
-    // branchless counter update (increment, decrement, or keep)
-    const uint16_t result = LOOKUP[state];
-    const int8_t delta = (int8_t)result & 0xFF;
-    counter += delta;
-    // branchless error tracking for later handling
-    const uint8_t error = (uint8_t)result >> 8;
-    error_flag |= error;
+    // 32 bits counter: 55 cycles
+    // 16 bits counter: 42 cycles
+    const uint8_t result = LOOKUP[state];
+    const int8_t delta = (int8_t)result & 0b00000111;
+    counter += delta - 1;
+    if (result > CW) {
+      const uint8_t error = (uint8_t)result >> 3;
+      error_flag |= error;
+    }
+    // const uint8_t error = (uint8_t)result >> 3;
+    // error_flag |= error;
 #if defined(USE_Z_RESET)
-    // branchless counter reset:
-    // if reset is true (1) --> counter is and'ed with 0L (erased)
-    // if reset is false (0) --> counter is and'ed with 0xFFFFFFFF (kept intact)
-    const bool reset = encoder.reset_detected();
-    const uint32_t mask = ((uint32_t)reset) - 1;
-    counter &= mask;
-    // branchless homing flag
-    homing_canary = homing_canary || reset;
+    if (encoder.reset_detected()) {
+      counter = 0;
+      homing_canary = true;
+    }
 #endif  // USE_Z_RESET
   }
 
@@ -559,7 +591,10 @@ public:
     counter = 0;
   }
 
-  void increment_counter() {
+  inline void increment_counter() __attribute__((always_inline)) {
+    // 32 bits counter: 20 cycles
+    // 16 bits counter: 10 cycles
+    // 8 bits counter: 5 cycles
     counter++;
   }
 
@@ -592,22 +627,26 @@ public:
   // 1 state bit for dual signal, and a before and after => 4 bits required
   static const uint8_t LOOKUP_SIZE = (1 << 4);
 
+  // LookupResult has an integer values of "0bFEEEEVVV" where
+  // - F is error flag
+  // - E is error code (0-16)
+  // - V is "counter_increment+1" on 3 bits
   typedef enum {
-    CCW = 0x00FF,        // -1 without error
-    NOOP = 0x0000,       // 0 without error
-    CW = 0x0001,         // +1 without error
-    INVALID_3 = 0x8300,  // 0 with error and state was 0b0011
-    INVALID_6 = 0x8600,  // 0 with error and state was 0b0110
-    INVALID_9 = 0x8900,  // 0 with error and state was 0b1001
-    INVALID_C = 0x8C00,  // 0 with error and state was 0b1100
+    CCW = 0,                 // -1 without error
+    NOOP = 1,                // 0 without error
+    CW = 2,                  // +1 without error
+    INVALID_3 = 0b10011000,  // 0 with error and state was 0b0011 = 3
+    INVALID_6 = 0b10110000,  // 0 with error and state was 0b0110 = 6
+    INVALID_9 = 0b11001000,  // 0 with error and state was 0b1001 = 9
+    INVALID_C = 0b11100000,  // 0 with error and state was 0b1100 = 12
   } LookupResult;
 
-  static const uint16_t LOOKUP[];
+  static const uint8_t LOOKUP[];
 
 private:
   const Encoder& encoder;
   volatile uint8_t state;
-  volatile uint32_t counter;
+  volatile CONFIG_ENCODER_COUNTER_TYPE counter;
   uint32_t relative_zero;
   volatile uint8_t error_flag;
 #if defined(USE_Z_RESET)
@@ -615,7 +654,7 @@ private:
 #endif  // USE_Z_RESET
 };
 
-const uint16_t Quadrature::LOOKUP[LOOKUP_SIZE] = {
+const uint8_t Quadrature::LOOKUP[LOOKUP_SIZE] = {
   /* i old new        */
   /*    ba BA         */
   /* 0  00 00 same    */ NOOP,
@@ -1138,6 +1177,54 @@ void setup() {
   global_application.setup();
 }
 
+#if defined(USE_TIMING)
+void time_sensitive_functions() {
+  PRINT_CLOCK_CYCLES("ck_enc_ab", global_encoder.get_pin_a());
+  PRINT_CLOCK_CYCLES("ck_enc_rst", global_encoder.reset_detected());
+  PRINT_CLOCK_CYCLES("ck_quad_inc", global_quadrature.increment_counter());
+  PRINT_CLOCK_CYCLES("ck_quad_in", global_quadrature.update_state_from_inputs());
+  PRINT_CLOCK_CYCLES("ck_quad_up", global_quadrature.update_counter_from_quadrature());
+
+  // 32-bit quadrature counter
+  // ck_enc_ab=1 ovf=1
+  // ck_enc_rst=1 ovf=1
+  // ck_quad_inc=20 ovf=1
+  // ck_quad_in=24 ovf=1
+  // ck_quad_up=53 ovf=1
+  // loops=1472 (without any interrupt activity)
+
+  // 16-bit quadrature counter
+  // ck_enc_ab=1 ovf=1
+  // ck_enc_rst=1 ovf=1
+  // ck_quad_inc=10 ovf=1
+  // ck_quad_in=24 ovf=1
+  // ck_quad_up=40 ovf=1
+  // loops=1473 (without any interrupt activity)
+
+  // isr waveform duration with 16-bit counter
+  // isr_speed = 1.74us ~ (quad_inc) * 125ns
+  // isr_position = 7.71us ~ (quad_in + quad_up) * 125ns
+}
+#endif  // USE_TIMING
+
 void loop() {
   global_application.loop();
+
+  static uint32_t last = 0;
+  static uint32_t loop_count = 0;
+  static uint32_t min_loop_count = 1000000;
+  if (millis() - last > 1000) {
+    last = millis();
+#if defined(USE_TIMING)
+    time_sensitive_functions();
+#endif  // USE_TIMING
+    if (loop_count < min_loop_count) {
+      min_loop_count = loop_count;
+      SERIAL_PRINT("min_loops=");
+      SERIAL_PRINTLN(min_loop_count);
+    }
+    loop_count = 0;
+  } else {
+    loop_count++;
+  }
 }
