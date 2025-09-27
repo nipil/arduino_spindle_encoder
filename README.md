@@ -183,6 +183,15 @@ If you **soldered a perfboard** yourself (one with letters on the long side):
   - because 1 rotation = 4 * number of pulse per revolution = events
   - to chose your encoder PPR, check `desired_RPM * PPR < 1 500 000`
 
+# Error codes
+
+  - `E003`, `E006`, `E009`, `E012`, or any error cumulated error from `1` to `15`
+    - Cause : this meands a quadrature encoder error because steps were missed
+    - Problem : rotation speed was too high, in DEGREE or RAW mode
+    - Solutions
+      - clear the error by pressing the button (returns to RPM mode)
+      - remember to switch to RPM mode *before* starting spindle motor !
+
 # Components
 
 For this project, you will need :
@@ -204,6 +213,12 @@ And see [Bill of materials](BOM.csv) for others components :
 - terminals
 
 # Requirements
+
+- Memory
+  - without any features : ~3700 bytes required
+  - with USE_Z_RESET : ~80 more bytes required
+  - so up to here, a 4K flash MCU without bootloader or with a 256-bytes bootloader would work
+  - for all features : ~5900 bytes required, so that usually means an 8K flash
 
 - Electrical characteristics
   - 5V power supply (adapt the display resistors in case of a 3.3V MCU)
