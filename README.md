@@ -237,8 +237,7 @@ And see [Bill of materials](BOM.csv) for others components :
 # Installation
 
 - Clone the project and open in arduino IDE
-- Optional : install `digitalWriteFast` library
-  - Uncomment the `USE_FAST_LIBRARY` define at the top of the INO file
+- REQUIRED : install `digitalWriteFast` library
 
 - Option 1 : Using an UNO-as-ISP and breadboard schematic
   - use Sketch / Upload using programmer
